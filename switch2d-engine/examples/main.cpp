@@ -10,7 +10,10 @@ using namespace Switch2D;
 // ============================================
 class PlayerController : public Component {
 public:
-    float moveSpeed = 200.0f;
+    float moveSpeed = 250.0f;
+    float jumpForce = 450.0f;
+    float groundY = 650.0f; // 地面位置
+    bool isGrounded = false;
     
     Rigidbody* rigidbody = nullptr;
     SpriteRenderer* spriteRenderer = nullptr;
@@ -23,43 +26,60 @@ public:
     void onUpdate() override {
         InputManager* input = Engine::getInstance().getInput();
         
-        // 上下左右移动
-        Vector2 movement = Vector2::Zero();
+        // 检测是否在地面上（检测范围稍微宽松一点）
+        float distanceToGround = transform->position.y - groundY;
+        isGrounded = (distanceToGround >= -5.0f && distanceToGround <= 5.0f);
         
+        // 调试输出（每秒打印一次）
+        static float debugTimer = 0;
+        debugTimer += Time::deltaTime;
+        if (debugTimer >= 1.0f) {
+            printf("Player Y: %.2f, Ground: %.2f, IsGrounded: %s, Velocity.Y: %.2f\n", 
+                   transform->position.y, groundY, isGrounded ? "YES" : "NO", 
+                   rigidbody ? rigidbody->velocity.y : 0);
+            debugTimer = 0;
+        }
+        
+        // 左右移动
+        float moveX = 0;
         if (input->getButton(Button::Left) || input->getLeftStick().x < -0.3f) {
-            movement.x = -1;
+            moveX = -1;
             if (spriteRenderer) spriteRenderer->flipX = true;
         }
         if (input->getButton(Button::Right) || input->getLeftStick().x > 0.3f) {
-            movement.x = 1;
+            moveX = 1;
             if (spriteRenderer) spriteRenderer->flipX = false;
-        }
-        if (input->getButton(Button::Up) || input->getLeftStick().y > 0.3f) {
-            movement.y = -1;
-        }
-        if (input->getButton(Button::Down) || input->getLeftStick().y < -0.3f) {
-            movement.y = 1;
-        }
-        
-        // 归一化移动向量（避免斜向移动过快）
-        if (movement.lengthSquared() > 0) {
-            movement = movement.normalized();
         }
         
         if (rigidbody) {
-            rigidbody->velocity = movement * moveSpeed;
-        } else {
-            transform->position += movement * moveSpeed * Time::deltaTime;
+            // 只控制水平速度，垂直速度由重力控制
+            rigidbody->velocity.x = moveX * moveSpeed;
+            
+            // 跳跃（只在地面上时）
+            if (input->getButtonDown(Button::A) || input->getButtonDown(Button::B)) {
+                printf("Button pressed! IsGrounded: %s\n", isGrounded ? "YES" : "NO");
+                if (isGrounded) {
+                    rigidbody->velocity.y = -jumpForce;
+                    printf("Jump! velocity.y = %.2f\n", rigidbody->velocity.y);
+                } else {
+                    printf("Cannot jump - not grounded!\n");
+                }
+            }
+            
+            // 简单的地面碰撞
+            if (transform->position.y >= groundY) {
+                transform->position.y = groundY;
+                if (rigidbody->velocity.y > 0) {
+                    rigidbody->velocity.y = 0;
+                }
+            }
         }
         
         // 边界限制
         Engine& engine = Engine::getInstance();
-        if (transform->position.x < 0) transform->position.x = 0;
-        if (transform->position.x > engine.getScreenWidth()) 
-            transform->position.x = engine.getScreenWidth();
-        if (transform->position.y < 0) transform->position.y = 0;
-        if (transform->position.y > engine.getScreenHeight())
-            transform->position.y = engine.getScreenHeight();
+        if (transform->position.x < 25) transform->position.x = 25;
+        if (transform->position.x > engine.getScreenWidth() - 25) 
+            transform->position.x = engine.getScreenWidth() - 25;
     }
 };
 
@@ -132,9 +152,17 @@ public:
         Camera* camera = cameraObj->addComponent<Camera>();
         camera->backgroundColor = Color(50, 50, 100);
         
+        // 创建地面平台
+        GameObject* ground = createGameObject("Ground");
+        ground->transform->position = {640, 680};
+        ground->transform->scale = {1280, 80};
+        
+        SpriteRenderer* groundRenderer = ground->addComponent<SpriteRenderer>();
+        groundRenderer->tint = Color(80, 80, 80); // 深灰色
+        
         // 创建玩家（方块）
         GameObject* player = createGameObject("Player");
-        player->transform->position = {640, 500};
+        player->transform->position = {640, 650};
         player->transform->scale = {50, 50};
         
         // 添加玩家渲染器（纯色方块）
@@ -143,16 +171,29 @@ public:
         
         // 添加玩家控制器
         PlayerController* playerCtrl = player->addComponent<PlayerController>();
-        playerCtrl->moveSpeed = 300.0f;
+        playerCtrl->groundY = 650.0f;  // 设置地面位置
         
-        // 添加刚体和碰撞体
+        // 添加刚体（启用重力）
         Rigidbody* rb = player->addComponent<Rigidbody>();
         rb->mass = 1.0f;
-        rb->drag = 1.0f;
-        rb->useGravity = false;  // 禁用重力，让玩家可以自由移动
+        rb->drag = 0.5f;
+        rb->useGravity = true;  // 启用重力
+        rb->gravityScale = 1.0f;
         
         BoxCollider* collider = player->addComponent<BoxCollider>();
         collider->size = {50, 50};
+        
+        // 创建几个跳跃平台
+        float platformYPositions[] = {550, 450, 350, 450, 550};
+        float platformXPositions[] = {200, 400, 640, 880, 1080};
+        for (int i = 0; i < 5; i++) {
+            GameObject* platform = createGameObject("Platform");
+            platform->transform->position = {platformXPositions[i], platformYPositions[i]};
+            platform->transform->scale = {150, 20};
+            
+            SpriteRenderer* platRenderer = platform->addComponent<SpriteRenderer>();
+            platRenderer->tint = Color(120, 120, 120);
+        }
         
         // 创建一些旋转的装饰对象
         for (int i = 0; i < 5; i++) {
