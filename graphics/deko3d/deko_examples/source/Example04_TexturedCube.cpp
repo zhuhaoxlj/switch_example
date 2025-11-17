@@ -186,7 +186,7 @@ public:
         memcpy(vertexBuffer.getCpuAddr(), CubeVertexData.data(), vertexBuffer.getSize());
 
         // Load the image
-        texImage.load(*pool_images, *pool_data, device, queue, "romfs:/cat-256x256.bc1", 256, 256, DkImageFormat_RGB_BC1);
+        texImage.load(*pool_images, *pool_data, device, queue, "romfs:/lan-1024x1024.raw", 1024, 1024, DkImageFormat_RGBA8_Unorm);
 
         // Configure persistent state in the queue
         {
