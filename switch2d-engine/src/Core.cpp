@@ -3,6 +3,7 @@
 #include "Switch2D/Input.h"
 #include "Switch2D/Audio.h"
 #include "Switch2D/Resources.h"
+#include "Switch2D/DebugConsole.h"
 #include <cstdio>
 
 namespace Switch2D {
@@ -38,7 +39,10 @@ Engine& Engine::getInstance() {
 bool Engine::initialize(const Config& cfg) {
     config = cfg;
     
-    printf("Initializing Switch2D Engine...\n");
+    printf("\n========================================\n");
+    printf("  Switch2D Engine v1.0.0\n");
+    printf("========================================\n");
+    printf("Initializing...\n");
     
     // 初始化 SDL
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_JOYSTICK | SDL_INIT_TIMER) < 0) {
@@ -107,6 +111,11 @@ bool Engine::initialize(const Config& cfg) {
     }
     
     resourceManager->initialize(renderer);
+    
+    // 初始化调试控制台
+    DebugConsole::getInstance().initialize(renderer);
+    DebugConsole::getInstance().log("Switch2D Engine initialized!");
+    DebugConsole::getInstance().logf("Resolution: %dx%d", config.screenWidth, config.screenHeight);
     
     printf("Switch2D Engine initialized successfully!\n");
     printf("Resolution: %dx%d\n", config.screenWidth, config.screenHeight);
@@ -220,6 +229,9 @@ void Engine::render() {
         currentScene->render();
         currentScene->onRender();
     }
+    
+    // 渲染调试控制台（最后渲染，显示在最上层）
+    DebugConsole::getInstance().render();
     
     // 呈现
     SDL_RenderPresent(renderer);

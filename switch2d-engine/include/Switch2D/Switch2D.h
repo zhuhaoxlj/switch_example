@@ -12,6 +12,7 @@
 #include "Audio.h"
 #include "Resources.h"
 #include "Physics.h"
+#include "DebugConsole.h"
 
 // Main namespace
 namespace Switch2D {

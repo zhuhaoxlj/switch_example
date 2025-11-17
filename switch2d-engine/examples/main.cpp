@@ -26,17 +26,27 @@ public:
     void onUpdate() override {
         InputManager* input = Engine::getInstance().getInput();
         
+        // 检测 A+B 切换调试控制台
+        static bool wasABPressed = false;
+        bool isABPressed = input->getButton(Button::A) && input->getButton(Button::B);
+        
+        if (isABPressed && !wasABPressed) {
+            DebugConsole::getInstance().toggle();
+            DEBUG_LOG("Debug console toggled");
+        }
+        wasABPressed = isABPressed;
+        
         // 检测是否在地面上（检测范围稍微宽松一点）
         float distanceToGround = transform->position.y - groundY;
         isGrounded = (distanceToGround >= -5.0f && distanceToGround <= 5.0f);
         
-        // 调试输出（每秒打印一次）
+        // 调试输出到控制台（每秒一次）
         static float debugTimer = 0;
         debugTimer += Time::deltaTime;
         if (debugTimer >= 1.0f) {
-            printf("Player Y: %.2f, Ground: %.2f, IsGrounded: %s, Velocity.Y: %.2f\n", 
-                   transform->position.y, groundY, isGrounded ? "YES" : "NO", 
-                   rigidbody ? rigidbody->velocity.y : 0);
+            DEBUG_LOG("Player Y: %.2f, Ground: %.2f, IsGrounded: %s, Vel.Y: %.2f", 
+                      transform->position.y, groundY, isGrounded ? "YES" : "NO", 
+                      rigidbody ? rigidbody->velocity.y : 0);
             debugTimer = 0;
         }
         
@@ -55,14 +65,14 @@ public:
             // 只控制水平速度，垂直速度由重力控制
             rigidbody->velocity.x = moveX * moveSpeed;
             
-            // 跳跃（只在地面上时）
-            if (input->getButtonDown(Button::A) || input->getButtonDown(Button::B)) {
-                printf("Button pressed! IsGrounded: %s\n", isGrounded ? "YES" : "NO");
+            // 跳跃（只在地面上时，但不在按A+B时）
+            if ((input->getButtonDown(Button::A) || input->getButtonDown(Button::B)) && !isABPressed) {
+                DEBUG_LOG("Button pressed! IsGrounded: %s", isGrounded ? "YES" : "NO");
                 if (isGrounded) {
                     rigidbody->velocity.y = -jumpForce;
-                    printf("Jump! velocity.y = %.2f\n", rigidbody->velocity.y);
+                    DEBUG_LOG("Jump! velocity.y = %.2f", rigidbody->velocity.y);
                 } else {
-                    printf("Cannot jump - not grounded!\n");
+                    DEBUG_LOG("Cannot jump - not grounded!");
                 }
             }
             
@@ -143,6 +153,7 @@ public:
     
     void onLoad() override {
         printf("Loading Demo Scene...\n");
+        DEBUG_LOG("Loading Demo Scene...");
         
         Engine& engine = Engine::getInstance();
         ResourceManager* resources = engine.getResources();
@@ -235,6 +246,7 @@ public:
         }
         
         printf("Demo Scene loaded!\n");
+        DEBUG_LOG("Demo Scene loaded! Press A+B to toggle debug console");
     }
     
     void onUpdate() override {
@@ -272,7 +284,8 @@ int main(int argc, char* argv[]) {
     printf("\n");
     printf("Controls:\n");
     printf("  D-Pad/Left Stick - Move player\n");
-    printf("  A/B Button - Jump\n");
+    printf("  A or B Button - Jump\n");
+    printf("  A + B Together - Toggle Debug Console\n");
     printf("  + Button - Exit\n");
     printf("\n");
     
