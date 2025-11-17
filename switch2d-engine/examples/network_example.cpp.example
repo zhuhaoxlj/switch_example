@@ -1,0 +1,278 @@
+// Network Module Example for Switch2D Engine
+// 展示如何使用网络功能获取网页源码、API 调用等
+
+#include "Switch2D/Switch2D.h"
+#include <ctime>
+
+using namespace Switch2D;
+
+// ============================================
+// 网络演示场景
+// ============================================
+class NetworkDemoScene : public Scene {
+public:
+    NetworkDemoScene() : Scene("Network Demo") {}
+    
+    void onLoad() override {
+        DEBUG_LOG("=== Network Demo Scene ===");
+        
+        // 获取网络管理器
+        NetworkManager* net = Engine::getInstance().getNetwork();
+        
+        if (!net->isInitialized()) {
+            DEBUG_LOG("ERROR: Network not initialized!");
+            DEBUG_LOG("Check Switch network settings");
+            return;
+        }
+        
+        DEBUG_LOG("Network initialized successfully");
+        DEBUG_LOG("Press buttons to test network features:");
+        DEBUG_LOG("  A - Get webpage source");
+        DEBUG_LOG("  B - Test DNS resolution");
+        DEBUG_LOG("  X - Test HTTP POST");
+        DEBUG_LOG("  Y - Download file");
+        DEBUG_LOG("  + - Exit");
+        
+        networkManager = net;
+    }
+    
+    void onUpdate() override {
+        InputManager* input = Engine::getInstance().getInput();
+        
+        // 退出
+        if (input->getButtonDown(Button::Plus)) {
+            Engine::getInstance().quit();
+            return;
+        }
+        
+        // 防止重复触发
+        if (isProcessing) {
+            return;
+        }
+        
+        // A - 获取网页源码
+        if (input->getButtonDown(Button::A)) {
+            testGetWebpage();
+        }
+        
+        // B - DNS 解析
+        if (input->getButtonDown(Button::B)) {
+            testDNS();
+        }
+        
+        // X - POST 请求
+        if (input->getButtonDown(Button::X)) {
+            testPOST();
+        }
+        
+        // Y - 下载文件
+        if (input->getButtonDown(Button::Y)) {
+            testDownload();
+        }
+    }
+    
+private:
+    NetworkManager* networkManager = nullptr;
+    bool isProcessing = false;
+    
+    // ========================================
+    // 测试 1: 获取网页源码
+    // ========================================
+    void testGetWebpage() {
+        DEBUG_LOG("=== Test 1: Get Webpage ===");
+        DEBUG_LOG("Fetching http://example.com...");
+        isProcessing = true;
+        
+        HTTPResponse resp = networkManager->get("http://example.com");
+        
+        if (resp.isSuccess()) {
+            DEBUG_LOG("SUCCESS! Status: %d %s", 
+                     resp.statusCode, resp.statusMessage.c_str());
+            
+            // 显示响应头
+            DEBUG_LOG("Response headers:");
+            for (const auto& header : resp.headers) {
+                DEBUG_LOG("  %s: %s", header.first.c_str(), header.second.c_str());
+            }
+            
+            // 显示内容
+            std::string body = resp.getBodyAsString();
+            DEBUG_LOG("Body size: %zu bytes", body.length());
+            
+            // 显示前200个字符
+            if (body.length() > 200) {
+                DEBUG_LOG("Preview: %s...", body.substr(0, 200).c_str());
+            } else {
+                DEBUG_LOG("Content: %s", body.c_str());
+            }
+        } else {
+            DEBUG_LOG("FAILED!");
+            DEBUG_LOG("Error: %s", resp.error.c_str());
+            if (resp.statusCode > 0) {
+                DEBUG_LOG("Status: %d %s", resp.statusCode, resp.statusMessage.c_str());
+            }
+        }
+        
+        isProcessing = false;
+    }
+    
+    // ========================================
+    // 测试 2: DNS 解析
+    // ========================================
+    void testDNS() {
+        DEBUG_LOG("=== Test 2: DNS Resolution ===");
+        isProcessing = true;
+        
+        // 测试多个域名
+        const char* hosts[] = {
+            "example.com",
+            "google.com",
+            "github.com",
+            "nintendo.com"
+        };
+        
+        for (const char* host : hosts) {
+            DEBUG_LOG("Resolving %s...", host);
+            std::string ip = networkManager->resolveHost(host);
+            
+            if (!ip.empty()) {
+                DEBUG_LOG("  -> %s", ip.c_str());
+            } else {
+                DEBUG_LOG("  -> FAILED");
+            }
+        }
+        
+        isProcessing = false;
+    }
+    
+    // ========================================
+    // 测试 3: HTTP POST 请求
+    // ========================================
+    void testPOST() {
+        DEBUG_LOG("=== Test 3: HTTP POST ===");
+        DEBUG_LOG("Sending POST to httpbin.org...");
+        isProcessing = true;
+        
+        // 构建 JSON 数据
+        std::string jsonData = R"({
+            "game": "Switch2D Demo",
+            "player": "TestPlayer",
+            "score": 12345,
+            "timestamp": )" + std::to_string(time(nullptr)) + R"(
+        })";
+        
+        DEBUG_LOG("POST data: %s", jsonData.c_str());
+        
+        HTTPResponse resp = networkManager->post(
+            "http://httpbin.org/post",
+            jsonData,
+            "application/json"
+        );
+        
+        if (resp.isSuccess()) {
+            DEBUG_LOG("SUCCESS!");
+            DEBUG_LOG("Response: %s", resp.getBodyAsString().c_str());
+        } else {
+            DEBUG_LOG("FAILED: %s", resp.error.c_str());
+        }
+        
+        isProcessing = false;
+    }
+    
+    // ========================================
+    // 测试 4: 下载文件
+    // ========================================
+    void testDownload() {
+        DEBUG_LOG("=== Test 4: Download File ===");
+        DEBUG_LOG("Downloading small test file...");
+        isProcessing = true;
+        
+        // 下载一个小文件作为测试
+        std::string url = "http://httpbin.org/bytes/1024";  // 1KB
+        std::string savePath = "download_test.bin";
+        
+        bool success = networkManager->downloadFile(
+            url, 
+            savePath,
+            [](size_t downloaded, size_t total) {
+                if (total > 0) {
+                    float percent = downloaded * 100.0f / total;
+                    DEBUG_LOG("Progress: %.1f%% (%zu/%zu bytes)", 
+                             percent, downloaded, total);
+                } else {
+                    DEBUG_LOG("Downloaded: %zu bytes", downloaded);
+                }
+            }
+        );
+        
+        if (success) {
+            DEBUG_LOG("Download complete!");
+            DEBUG_LOG("Saved to: %s", savePath.c_str());
+        } else {
+            DEBUG_LOG("Download failed!");
+        }
+        
+        isProcessing = false;
+    }
+};
+
+// ============================================
+// 主函数
+// ============================================
+int main(int argc, char* argv[]) {
+    // 初始化 romfs
+    Result rc = romfsInit();
+    if (R_FAILED(rc)) {
+        printf("romfsInit failed: 0x%x\n", rc);
+    }
+    
+    printf("\n");
+    printf("========================================\n");
+    printf("  Switch2D Network Demo\n");
+    printf("========================================\n");
+    printf("\n");
+    printf("Controls:\n");
+    printf("  A - Get webpage source\n");
+    printf("  B - Test DNS resolution\n");
+    printf("  X - Test HTTP POST\n");
+    printf("  Y - Download file\n");
+    printf("  + - Exit\n");
+    printf("\n");
+    printf("Make sure Switch is connected to network!\n");
+    printf("\n");
+    
+    // 初始化引擎
+    Engine& engine = Engine::getInstance();
+    
+    Engine::Config config;
+    config.title = "Network Demo";
+    config.screenWidth = 1280;
+    config.screenHeight = 720;
+    config.vsync = true;
+    config.targetFPS = 60;
+    
+    if (!engine.initialize(config)) {
+        printf("Failed to initialize engine!\n");
+        return -1;
+    }
+    
+    // 检查网络
+    NetworkManager* net = engine.getNetwork();
+    if (!net->isInitialized()) {
+        printf("WARNING: Network not initialized!\n");
+        printf("Some features may not work.\n");
+    }
+    
+    // 加载演示场景
+    engine.loadScene(std::make_unique<NetworkDemoScene>());
+    
+    // 运行
+    engine.run();
+    
+    // 清理
+    engine.shutdown();
+    romfsExit();
+    
+    printf("\nThanks for testing!\n");
+    return 0;
+}

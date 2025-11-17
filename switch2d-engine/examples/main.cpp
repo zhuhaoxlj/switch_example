@@ -154,6 +154,7 @@ public:
     void onLoad() override {
         printf("Loading Demo Scene...\n");
         DEBUG_LOG("Loading Demo Scene...");
+        DEBUG_LOG("Press X to fetch Baidu homepage!");
         
         Engine& engine = Engine::getInstance();
         ResourceManager* resources = engine.getResources();
@@ -256,6 +257,11 @@ public:
             Engine::getInstance().quit();
         }
         
+        // X 键 - 请求百度网页源码
+        if (input->getButtonDown(Button::X)) {
+            fetchBaiduPage();
+        }
+        
         // 物理碰撞检测
         Physics::checkCollisions(this);
         
@@ -267,6 +273,74 @@ public:
                 printf("FPS: %.1f | Objects: %zu\n", fps, getGameObjects().size());
             }
             lastPrintTime = Time::frameCount;
+        }
+    }
+    
+private:
+    // 获取百度首页源码
+    void fetchBaiduPage() {
+        DEBUG_LOG("=== Fetching Baidu ===");
+        DEBUG_LOG("URL: http://www.baidu.com");
+        DEBUG_LOG("Please wait...");
+        
+        // 获取网络管理器
+        NetworkManager* net = Engine::getInstance().getNetwork();
+        
+        if (!net->isInitialized()) {
+            DEBUG_LOG("ERROR: Network not initialized!");
+            DEBUG_LOG("Check Switch network settings");
+            return;
+        }
+        
+        // 发送 GET 请求
+        HTTPResponse resp = net->get("http://www.baidu.com");
+        
+        if (resp.isSuccess()) {
+            DEBUG_LOG("SUCCESS! Status: %d", resp.statusCode);
+            
+            // 显示响应头
+            if (resp.headers.find("Content-Type") != resp.headers.end()) {
+                DEBUG_LOG("Content-Type: %s", resp.headers["Content-Type"].c_str());
+            }
+            if (resp.headers.find("Server") != resp.headers.end()) {
+                DEBUG_LOG("Server: %s", resp.headers["Server"].c_str());
+            }
+            
+            // 获取HTML内容
+            std::string html = resp.getBodyAsString();
+            DEBUG_LOG("Page size: %zu bytes", html.length());
+            
+            // 显示前500个字符
+            if (html.length() > 500) {
+                std::string preview = html.substr(0, 500);
+                DEBUG_LOG("Preview (first 500 chars):");
+                DEBUG_LOG("%s", preview.c_str());
+                DEBUG_LOG("... (truncated)");
+            } else {
+                DEBUG_LOG("Full content:");
+                DEBUG_LOG("%s", html.c_str());
+            }
+            
+            // 查找标题
+            size_t titleStart = html.find("<title>");
+            if (titleStart != std::string::npos) {
+                size_t titleEnd = html.find("</title>", titleStart);
+                if (titleEnd != std::string::npos) {
+                    std::string title = html.substr(titleStart + 7, titleEnd - titleStart - 7);
+                    DEBUG_LOG("Page title: %s", title.c_str());
+                }
+            }
+            
+            DEBUG_LOG("Request complete!");
+        } else {
+            DEBUG_LOG("FAILED!");
+            if (!resp.error.empty()) {
+                DEBUG_LOG("Error: %s", resp.error.c_str());
+            }
+            if (resp.statusCode > 0) {
+                DEBUG_LOG("Status: %d %s", resp.statusCode, resp.statusMessage.c_str());
+            }
+            DEBUG_LOG("Make sure Switch is connected to network");
         }
     }
 };
@@ -293,6 +367,7 @@ int main(int argc, char* argv[]) {
     printf("Controls:\n");
     printf("  D-Pad/Left Stick - Move player\n");
     printf("  A or B Button - Jump\n");
+    printf("  X Button - Fetch Baidu.com (网络测试)\n");
     printf("  A + B Together - Toggle Debug Console\n");
     printf("  + Button - Exit\n");
     printf("\n");

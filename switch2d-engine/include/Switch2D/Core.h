@@ -13,6 +13,7 @@ class Scene;
 class InputManager;
 class AudioManager;
 class ResourceManager;
+class NetworkManager;
 
 // ============================================
 // Time - 时间管理
@@ -56,6 +57,7 @@ public:
     InputManager* getInput() const { return inputManager.get(); }
     AudioManager* getAudio() const { return audioManager.get(); }
     ResourceManager* getResources() const { return resourceManager.get(); }
+    NetworkManager* getNetwork() const { return networkManager.get(); }
     
     int getScreenWidth() const { return config.screenWidth; }
     int getScreenHeight() const { return config.screenHeight; }
@@ -81,6 +83,7 @@ private:
     std::unique_ptr<InputManager> inputManager;
     std::unique_ptr<AudioManager> audioManager;
     std::unique_ptr<ResourceManager> resourceManager;
+    std::unique_ptr<NetworkManager> networkManager;
     
     bool running = false;
 };

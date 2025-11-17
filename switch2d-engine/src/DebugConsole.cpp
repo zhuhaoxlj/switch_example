@@ -75,9 +75,7 @@ void DebugConsole::initialize(SDL_Renderer* r, const char* fontPath) {
         // 尝试多个可能的路径格式
         const char* tryPaths[] = {
             fontPath,  // 原始路径
-            "fonts/JetBrainsMonoNerdFont-Regular.ttf",
-            "/fonts/JetBrainsMonoNerdFont-Regular.ttf",
-            "JetBrainsMonoNerdFont-Regular.ttf"
+            "/fonts/LXGWWenKai-Regular.ttf"
         };
         
         bool loaded = false;

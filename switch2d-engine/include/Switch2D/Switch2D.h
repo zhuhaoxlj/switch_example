@@ -12,6 +12,7 @@
 #include "Audio.h"
 #include "Resources.h"
 #include "Physics.h"
+#include "Network.h"
 #include "DebugConsole.h"
 
 // Main namespace

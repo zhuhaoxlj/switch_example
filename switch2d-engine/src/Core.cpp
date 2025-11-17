@@ -3,6 +3,7 @@
 #include "Switch2D/Input.h"
 #include "Switch2D/Audio.h"
 #include "Switch2D/Resources.h"
+#include "Switch2D/Network.h"
 #include "Switch2D/DebugConsole.h"
 #include <cstdio>
 
@@ -105,6 +106,7 @@ bool Engine::initialize(const Config& cfg) {
     inputManager = std::make_unique<InputManager>();
     audioManager = std::make_unique<AudioManager>();
     resourceManager = std::make_unique<ResourceManager>();
+    networkManager = std::make_unique<NetworkManager>();
     
     if (!audioManager->initialize()) {
         printf("Warning: AudioManager initialization failed\n");
@@ -112,15 +114,15 @@ bool Engine::initialize(const Config& cfg) {
     
     resourceManager->initialize(renderer);
     
+    // 初始化网络（可选，失败不影响游戏运行）
+    if (!networkManager->initialize()) {
+        printf("Warning: NetworkManager initialization failed\n");
+    }
+    
     // 初始化调试控制台（使用 JetBrains Mono Nerd Font）
     // 尝试多个可能的 romfs 路径格式
     const char* fontPaths[] = {
-        "romfs:/fonts/JetBrainsMonoNerdFont-Regular.ttf",
-        "/fonts/JetBrainsMonoNerdFont-Regular.ttf",
-        "fonts/JetBrainsMonoNerdFont-Regular.ttf",
-        "romfs:/JetBrainsMonoNerdFont-Regular.ttf",
-        "/JetBrainsMonoNerdFont-Regular.ttf",
-        "JetBrainsMonoNerdFont-Regular.ttf"
+        "romfs:/fonts/LXGWWenKai-Regular.ttf",
     };
     
     const char* fontPath = fontPaths[0];
@@ -175,6 +177,7 @@ void Engine::shutdown() {
     
     currentScene.reset();
     resourceManager.reset();
+    networkManager.reset();
     audioManager.reset();
     inputManager.reset();
     
