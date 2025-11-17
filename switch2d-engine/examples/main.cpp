@@ -145,6 +145,125 @@ public:
 };
 
 // ============================================
+// 触控按钮组件
+// ============================================
+class TouchButton : public Component {
+public:
+    Rectangle bounds;
+    Color normalColor = Color(80, 120, 200);
+    Color hoverColor = Color(100, 150, 255);
+    Color pressedColor = Color(50, 90, 150);
+    std::string label;
+    int buttonId = 0;
+    
+    bool isPressed = false;
+    bool wasPressed = false;
+    
+    void onUpdate() override {
+        InputManager* input = Engine::getInstance().getInput();
+        
+        // 获取按钮在屏幕上的实际位置
+        Vector2 pos = gameObject->transform->position;
+        Vector2 scale = gameObject->transform->scale;
+        
+        bounds.x = pos.x - scale.x / 2;
+        bounds.y = pos.y - scale.y / 2;
+        bounds.width = scale.x;
+        bounds.height = scale.y;
+        
+        // 检查触摸
+        wasPressed = isPressed;
+        isPressed = false;
+        
+        if (input->isTouching()) {
+            Vector2 touchPos = input->getTouchPosition();
+            
+            // 检查触摸点是否在按钮范围内
+            if (touchPos.x >= bounds.x && touchPos.x <= bounds.x + bounds.width &&
+                touchPos.y >= bounds.y && touchPos.y <= bounds.y + bounds.height) {
+                isPressed = true;
+                
+                // 触摸按下事件
+                if (input->getTouchDown()) {
+                    onButtonClick();
+                }
+            }
+        }
+        
+        // 更新按钮颜色
+        SpriteRenderer* renderer = gameObject->getComponent<SpriteRenderer>();
+        if (renderer) {
+            if (isPressed) {
+                renderer->tint = pressedColor;
+            } else {
+                renderer->tint = normalColor;
+            }
+        }
+    }
+    
+    void onButtonClick() {
+        DEBUG_LOG("=== Button %d Clicked! ===", buttonId);
+        DEBUG_LOG("Label: %s", label.c_str());
+        DEBUG_LOG("Position: (%.0f, %.0f)", bounds.x, bounds.y);
+        
+        // 根据不同按钮执行不同操作
+        switch (buttonId) {
+            case 1:
+                DEBUG_LOG("Action: Test Button 1");
+                DEBUG_LOG("Touch input is working!");
+                break;
+            case 2:
+                DEBUG_LOG("Action: Network Test");
+                testNetwork();
+                break;
+            case 3:
+                DEBUG_LOG("Action: Change Color");
+                changeRandomColor();
+                break;
+            case 4:
+                DEBUG_LOG("Action: Show Info");
+                showSystemInfo();
+                break;
+        }
+    }
+    
+private:
+    void testNetwork() {
+        NetworkManager* net = Engine::getInstance().getNetwork();
+        if (!net->isInitialized()) {
+            DEBUG_LOG("Network not initialized");
+            return;
+        }
+        DEBUG_LOG("Fetching example.com...");
+        HTTPResponse resp = net->get("http://example.com");
+        if (resp.isSuccess()) {
+            DEBUG_LOG("Success! Size: %zu bytes", resp.body.size());
+        } else {
+            DEBUG_LOG("Failed: %s", resp.error.c_str());
+        }
+    }
+    
+    void changeRandomColor() {
+        SpriteRenderer* renderer = gameObject->getComponent<SpriteRenderer>();
+        if (renderer) {
+            normalColor = Color(rand() % 255, rand() % 255, rand() % 255);
+            DEBUG_LOG("New color: RGB(%d,%d,%d)", 
+                     normalColor.r, normalColor.g, normalColor.b);
+        }
+    }
+    
+    void showSystemInfo() {
+        DEBUG_LOG("=== System Info ===");
+        DEBUG_LOG("Screen: %dx%d", 
+                 Engine::getInstance().getScreenWidth(),
+                 Engine::getInstance().getScreenHeight());
+        DEBUG_LOG("FPS: %.1f", 1.0f / Time::deltaTime);
+        DEBUG_LOG("Frame: %llu", Time::frameCount);
+        DEBUG_LOG("Objects: %zu", gameObject->scene->getGameObjects().size());
+    }
+};
+
+// ============================================
 // 示例游戏场景
 // ============================================
 class DemoScene : public Scene {
@@ -246,8 +365,55 @@ public:
             circleCol->radius = 10.0f;
         }
         
+        // ========================================
+        // 创建触控按钮（屏幕底部）
+        // ========================================
+        DEBUG_LOG("Creating touch buttons...");
+        
+        struct ButtonConfig {
+            std::string label;
+            float x, y;
+            Color color;
+            int id;
+        };
+        
+        ButtonConfig buttons[] = {
+            {"Touch Test", 200, 650, Color(80, 120, 200), 1},
+            {"Network", 450, 650, Color(120, 180, 80), 2},
+            {"Color", 700, 650, Color(200, 120, 80), 3},
+            {"Info", 950, 650, Color(180, 80, 200), 4}
+        };
+        
+        for (int i = 0; i < 4; i++) {
+            GameObject* button = createGameObject(buttons[i].label);
+            button->transform->position = {buttons[i].x, buttons[i].y};
+            button->transform->scale = {180, 60};
+            
+            SpriteRenderer* btnRenderer = button->addComponent<SpriteRenderer>();
+            btnRenderer->tint = buttons[i].color;
+            
+            TouchButton* touchBtn = button->addComponent<TouchButton>();
+            touchBtn->label = buttons[i].label;
+            touchBtn->buttonId = buttons[i].id;
+            touchBtn->normalColor = buttons[i].color;
+            touchBtn->pressedColor = Color(
+                buttons[i].color.r * 0.6f,
+                buttons[i].color.g * 0.6f,
+                buttons[i].color.b * 0.6f
+            );
+        }
+        
+        // 显示触摸指示器（红色小圆点）
+        touchIndicator = createGameObject("Touch Indicator");
+        touchIndicator->transform->scale = {20, 20};
+        SpriteRenderer* indicatorRenderer = touchIndicator->addComponent<SpriteRenderer>();
+        indicatorRenderer->tint = Color(255, 0, 0, 200);
+        touchIndicator->active = false;
+        
         printf("Demo Scene loaded!\n");
         DEBUG_LOG("Demo Scene loaded! Press A+B to toggle debug console");
+        DEBUG_LOG("=== TOUCH THE BUTTONS! ===");
+        DEBUG_LOG("4 buttons at bottom of screen");
     }
     
     void onUpdate() override {
@@ -265,6 +431,27 @@ public:
         // 物理碰撞检测
         Physics::checkCollisions(this);
         
+        // 更新触摸指示器
+        if (input->isTouching()) {
+            Vector2 touchPos = input->getTouchPosition();
+            if (touchIndicator) {
+                touchIndicator->active = true;
+                touchIndicator->transform->position = touchPos;
+            }
+            
+            // 显示触摸坐标
+            static Vector2 lastTouchPos = {-1, -1};
+            if (input->getTouchDown() || 
+                (touchPos.x != lastTouchPos.x || touchPos.y != lastTouchPos.y)) {
+                DEBUG_LOG("Touch at: (%.0f, %.0f)", touchPos.x, touchPos.y);
+                lastTouchPos = touchPos;
+            }
+        } else {
+            if (touchIndicator) {
+                touchIndicator->active = false;
+            }
+        }
+        
         // 显示FPS
         static uint64_t lastPrintTime = 0;
         if (Time::frameCount % 60 == 0) {
@@ -277,6 +464,7 @@ public:
     }
     
 private:
+    GameObject* touchIndicator = nullptr;
     // 获取百度首页源码
     void fetchBaiduPage() {
         DEBUG_LOG("=== Fetching Baidu ===");
@@ -368,8 +556,15 @@ int main(int argc, char* argv[]) {
     printf("  D-Pad/Left Stick - Move player\n");
     printf("  A or B Button - Jump\n");
     printf("  X Button - Fetch Baidu.com (网络测试)\n");
+    printf("  TOUCHSCREEN - Click buttons at bottom! 👆\n");
     printf("  A + B Together - Toggle Debug Console\n");
     printf("  + Button - Exit\n");
+    printf("\n");
+    printf("Touch Buttons:\n");
+    printf("  🔵 Touch Test - Test touch input\n");
+    printf("  🟢 Network - Quick network test\n");
+    printf("  🟠 Color - Change button colors\n");
+    printf("  🟣 Info - Show system info\n");
     printf("\n");
     
     // 初始化引擎
