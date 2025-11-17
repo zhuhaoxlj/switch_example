@@ -275,6 +275,14 @@ public:
 // 主函数
 // ============================================
 int main(int argc, char* argv[]) {
+    // 初始化 romfs（必须在访问 romfs:/ 文件之前）
+    Result rc = romfsInit();
+    if (R_FAILED(rc)) {
+        printf("romfsInit failed: 0x%x\n", rc);
+    } else {
+        printf("romfs initialized successfully\n");
+    }
+    
     srand(time(NULL));
     
     printf("\n");
@@ -312,6 +320,9 @@ int main(int argc, char* argv[]) {
     
     // 清理
     engine.shutdown();
+    
+    // 退出 romfs
+    romfsExit();
     
     printf("\nThanks for playing!\n");
     return 0;

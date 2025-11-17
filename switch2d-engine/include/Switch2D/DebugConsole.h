@@ -1,5 +1,10 @@
 #pragma once
 #include <SDL.h>
+
+// SDL_ttf 支持（已安装）
+#define HAS_SDL_TTF 1
+#include <SDL_ttf.h>
+
 #include <string>
 #include <vector>
 #include <deque>
@@ -14,7 +19,7 @@ class DebugConsole {
 public:
     static DebugConsole& getInstance();
     
-    void initialize(SDL_Renderer* renderer);
+    void initialize(SDL_Renderer* renderer, const char* fontPath = nullptr);
     void shutdown();
     
     // 日志功能
@@ -34,23 +39,30 @@ public:
     
     // 配置
     void setMaxLines(int max) { maxLines = max; }
-    void setFontSize(int size) { fontSize = size; }
+    void setFontSize(int size);
     void setOpacity(float alpha) { opacity = alpha; }
+    bool loadFont(const char* fontPath, int size);
     
 private:
     DebugConsole() = default;
     ~DebugConsole() = default;
     
-    // 渲染文本（简单的像素字体）
+    // 渲染文本（TTF 字体）
     void renderText(const std::string& text, int x, int y, SDL_Color color);
+    void renderTextFallback(const std::string& text, int x, int y, SDL_Color color);
     void renderChar(char c, int x, int y, SDL_Color color);
     
     SDL_Renderer* renderer = nullptr;
+#ifdef HAS_SDL_TTF
+    TTF_Font* font = nullptr;
+#endif
     std::deque<std::string> logLines;
     
     bool visible = false;
-    int maxLines = 20;
-    int fontSize = 8;
+    bool useTTF = false;
+    int maxLines = 15;
+    int fontSize = 18;
+    int lineHeight = 22;
     float opacity = 0.85f;
     
     // 滚动

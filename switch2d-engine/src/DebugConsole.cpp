@@ -3,6 +3,7 @@
 #include <cstdarg>
 #include <cstring>
 #include <ctime>
+#include <algorithm>
 
 namespace Switch2D {
 
@@ -52,13 +53,70 @@ DebugConsole& DebugConsole::getInstance() {
     return instance;
 }
 
-void DebugConsole::initialize(SDL_Renderer* r) {
+void DebugConsole::initialize(SDL_Renderer* r, const char* fontPath) {
     renderer = r;
     logLines.clear();
     scrollOffset = 0;
+    
+#ifdef HAS_SDL_TTF
+    // 初始化 SDL_ttf
+    if (TTF_Init() == -1) {
+        printf("TTF_Init failed: %s\n", TTF_GetError());
+        useTTF = false;
+        log("[ERROR] TTF_Init failed - using pixel font");
+        return;
+    }
+    
+    // 尝试加载字体
+    log("=== FONT INIT ===");
+    log("Note: Need romfsInit() first!");
+    
+    if (fontPath) {
+        // 尝试多个可能的路径格式
+        const char* tryPaths[] = {
+            fontPath,  // 原始路径
+            "fonts/JetBrainsMonoNerdFont-Regular.ttf",
+            "/fonts/JetBrainsMonoNerdFont-Regular.ttf",
+            "JetBrainsMonoNerdFont-Regular.ttf"
+        };
+        
+        bool loaded = false;
+        for (int i = 0; i < 4; i++) {
+            logf("Try #%d: %s", i+1, tryPaths[i]);
+            
+            if (loadFont(tryPaths[i], fontSize)) {
+                printf("✅ Loaded TTF font: %s\n", tryPaths[i]);
+                log("SUCCESS!");
+                logf("Size: %d pt", fontSize);
+                loaded = true;
+                break;
+            } else {
+                log("Failed");
+            }
+        }
+        
+        if (!loaded) {
+            log("ALL ATTEMPTS FAILED");
+            log("Using pixel font");
+        }
+    } else {
+        log("No font path provided");
+    }
+#else
+    printf("SDL_ttf not available, using fallback pixel font\n");
+    useTTF = false;
+    log("[INFO] HAS_SDL_TTF not defined - using pixel font");
+#endif
 }
 
 void DebugConsole::shutdown() {
+#ifdef HAS_SDL_TTF
+    if (font) {
+        TTF_CloseFont(font);
+        font = nullptr;
+    }
+    TTF_Quit();
+#endif
     logLines.clear();
 }
 
@@ -125,6 +183,53 @@ void DebugConsole::update() {
     // 可以在这里添加滚动逻辑
 }
 
+bool DebugConsole::loadFont(const char* fontPath, int size) {
+#ifdef HAS_SDL_TTF
+    if (font) {
+        TTF_CloseFont(font);
+        font = nullptr;
+    }
+    
+    // 先检查文件是否存在
+    FILE* testFile = fopen(fontPath, "rb");
+    if (!testFile) {
+        printf("Font file not found: %s\n", fontPath);
+        useTTF = false;
+        return false;
+    }
+    fclose(testFile);
+    printf("Font file exists: %s\n", fontPath);
+    
+    font = TTF_OpenFont(fontPath, size);
+    if (!font) {
+        const char* error = TTF_GetError();
+        printf("Failed to load font %s: %s\n", fontPath, error);
+        useTTF = false;
+        return false;
+    }
+    
+    useTTF = true;
+    fontSize = size;
+    lineHeight = TTF_FontLineSkip(font);
+    printf("Font loaded successfully, line height: %d\n", lineHeight);
+    return true;
+#else
+    printf("SDL_ttf not available\n");
+    return false;
+#endif
+}
+
+void DebugConsole::setFontSize(int size) {
+    fontSize = size;
+#ifdef HAS_SDL_TTF
+    if (useTTF && font) {
+        // 需要重新加载字体以更改大小
+        // 这里保存当前字体路径会更好，但暂时跳过
+        lineHeight = size + 4;
+    }
+#endif
+}
+
 void DebugConsole::renderChar(char c, int x, int y, SDL_Color color) {
     if (!renderer) return;
     
@@ -163,7 +268,7 @@ void DebugConsole::renderChar(char c, int x, int y, SDL_Color color) {
     }
 }
 
-void DebugConsole::renderText(const std::string& text, int x, int y, SDL_Color color) {
+void DebugConsole::renderTextFallback(const std::string& text, int x, int y, SDL_Color color) {
     int curX = x;
     int curY = y;
     
@@ -185,13 +290,57 @@ void DebugConsole::renderText(const std::string& text, int x, int y, SDL_Color c
     }
 }
 
+void DebugConsole::renderText(const std::string& text, int x, int y, SDL_Color color) {
+    if (!renderer) return;
+    
+    // 只在第一次渲染时记录状态
+    static bool firstRender = true;
+    if (firstRender) {
+#ifdef HAS_SDL_TTF
+        printf("🎨 First render - useTTF=%s, font=%p\n", useTTF ? "true" : "false", (void*)font);
+        if (useTTF && font) {
+            log("=== RENDERING: TTF ===");
+        } else {
+            log("=== RENDERING: PIXEL ===");
+        }
+#else
+        printf("🎨 First render - HAS_SDL_TTF not defined\n");
+        log("=== NO SDL_TTF ===");
+#endif
+        firstRender = false;
+    }
+    
+#ifdef HAS_SDL_TTF
+    // 使用 TTF 字体
+    if (useTTF && font) {
+        SDL_Surface* surface = TTF_RenderUTF8_Blended(font, text.c_str(), color);
+        if (surface) {
+            SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
+            if (texture) {
+                SDL_Rect dstRect = {x, y, surface->w, surface->h};
+                SDL_RenderCopy(renderer, texture, nullptr, &dstRect);
+                SDL_DestroyTexture(texture);
+            }
+            SDL_FreeSurface(surface);
+        }
+    } else
+#endif
+    {
+        // 回退到像素字体
+        renderTextFallback(text, x, y, color);
+    }
+}
+
 void DebugConsole::render() {
     if (!visible || !renderer) return;
+    
+    int actualLineHeight = useTTF ? lineHeight : 7;
+    int headerHeight = useTTF ? lineHeight + 10 : 22;
     
     // 绘制半透明背景
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, (Uint8)(opacity * 255));
-    SDL_Rect bg = {5, 5, 1270, (maxLines + 2) * 7 + 10};
+    SDL_Rect bg = {5, 5, 1270, headerHeight + maxLines * actualLineHeight + 10};
     SDL_RenderFillRect(renderer, &bg);
     
     // 绘制边框
@@ -203,18 +352,19 @@ void DebugConsole::render() {
     renderText("DEBUG CONSOLE - Press A+B to toggle", 10, 10, titleColor);
     
     // 绘制分隔线
+    int separatorY = useTTF ? 10 + lineHeight + 2 : 20;
     SDL_SetRenderDrawColor(renderer, 100, 200, 255, 128);
-    SDL_RenderDrawLine(renderer, 10, 20, 1270, 20);
+    SDL_RenderDrawLine(renderer, 10, separatorY, 1270, separatorY);
     
     // 绘制日志
     SDL_Color textColor = {255, 255, 255, 255};
     int startLine = (logLines.size() > static_cast<size_t>(maxLines)) 
                     ? logLines.size() - maxLines : 0;
     
-    int yPos = 25;
+    int yPos = separatorY + 5;
     for (size_t i = startLine; i < logLines.size(); i++) {
         renderText(logLines[i], 10, yPos, textColor);
-        yPos += 7;
+        yPos += actualLineHeight;
     }
     
     // 如果有更多日志，显示指示器

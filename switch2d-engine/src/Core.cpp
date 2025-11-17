@@ -112,9 +112,21 @@ bool Engine::initialize(const Config& cfg) {
     
     resourceManager->initialize(renderer);
     
-    // 初始化调试控制台
-    DebugConsole::getInstance().initialize(renderer);
-    DebugConsole::getInstance().log("Switch2D Engine initialized!");
+    // 初始化调试控制台（使用 JetBrains Mono Nerd Font）
+    // 尝试多个可能的 romfs 路径格式
+    const char* fontPaths[] = {
+        "romfs:/fonts/JetBrainsMonoNerdFont-Regular.ttf",
+        "/fonts/JetBrainsMonoNerdFont-Regular.ttf",
+        "fonts/JetBrainsMonoNerdFont-Regular.ttf",
+        "romfs:/JetBrainsMonoNerdFont-Regular.ttf",
+        "/JetBrainsMonoNerdFont-Regular.ttf",
+        "JetBrainsMonoNerdFont-Regular.ttf"
+    };
+    
+    const char* fontPath = fontPaths[0];
+    DebugConsole::getInstance().initialize(renderer, fontPath);
+    DebugConsole::getInstance().log("Switch2D Engine initialized with TTF font!");
+    DebugConsole::getInstance().logf("Font: JetBrains Mono Nerd Font");
     DebugConsole::getInstance().logf("Resolution: %dx%d", config.screenWidth, config.screenHeight);
     
     printf("Switch2D Engine initialized successfully!\n");
