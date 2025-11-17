@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
+#include <cmath>
 
 using namespace Switch2D;
 
@@ -144,6 +145,234 @@ public:
     }
 };
 
+// 前向声明
+class DemoScene;
+
+// ============================================
+// 圆形渲染器组件
+// ============================================
+class CircleRenderer : public Component {
+public:
+    Color color = Color::White();
+    float radius = 25.0f;
+    
+    void onRender() override {
+        SDL_Renderer* renderer = Engine::getInstance().getRenderer();
+        Vector2 pos = gameObject->transform->position;
+        
+        SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+        
+        // 使用扫描线算法填充圆（每个 y 坐标绘制水平线）
+        int centerX = (int)pos.x;
+        int centerY = (int)pos.y;
+        int r = (int)radius;
+        
+        for (int y = -r; y <= r; y++) {
+            // 计算该 y 坐标上的 x 范围
+            int x = (int)sqrt(r * r - y * y);
+            // 绘制水平线填充
+            SDL_RenderDrawLine(renderer, 
+                             centerX - x, centerY + y, 
+                             centerX + x, centerY + y);
+        }
+    }
+};
+
+// ============================================
+// 陀螺仪控制器组件
+// ============================================
+class GyroController : public Component {
+public:
+    float sensitivity = 1800.0f;  // 再次提高灵敏度
+    float maxSpeed = 600.0f;      // 提高最大速度
+    float bounceCoefficient = 0.8f;  // 反弹系数
+    float speedStep = 200.0f;     // 速度调整步长
+    float minSpeed = 200.0f;      // 最小速度
+    float maxSpeedLimit = 50000.0f; // 最大速度上限
+    
+    void onUpdate() override {
+        InputManager* input = Engine::getInstance().getInput();
+        Rigidbody* rb = gameObject->getComponent<Rigidbody>();
+        
+        if (!rb) return;
+        
+        // 上下键调整速度
+        if (input->getButtonDown(Button::Up)) {
+            maxSpeed += speedStep;
+            if (maxSpeed > maxSpeedLimit) maxSpeed = maxSpeedLimit;
+            DEBUG_LOG("▲ Speed UP: %.0f", maxSpeed);
+        }
+        if (input->getButtonDown(Button::Down)) {
+            maxSpeed -= speedStep;
+            if (maxSpeed < minSpeed) maxSpeed = minSpeed;
+            DEBUG_LOG("▼ Speed DOWN: %.0f", maxSpeed);
+        }
+        
+        // 获取陀螺仪数据
+        Vector2 gyro = input->getGyro();
+        
+        // 修正陀螺仪方向映射（第二次修正）
+        // 根据二次实测：交换xy但不反转
+        // 陀螺仪向上 → 小球向上
+        // 陀螺仪向左 → 小球向左
+        Vector2 force = {
+            gyro.y * sensitivity,  // 前后倾斜控制左右
+            gyro.x * sensitivity   // 左右倾斜控制上下
+        };
+        
+        // 施加力到刚体
+        rb->velocity.x += force.x * Time::deltaTime;
+        rb->velocity.y += force.y * Time::deltaTime;
+        
+        // 限制最大速度
+        float speed = sqrt(rb->velocity.x * rb->velocity.x + rb->velocity.y * rb->velocity.y);
+        if (speed > maxSpeed) {
+            rb->velocity.x = (rb->velocity.x / speed) * maxSpeed;
+            rb->velocity.y = (rb->velocity.y / speed) * maxSpeed;
+        }
+        
+        // 检测边界碰撞并反弹
+        Vector2 pos = gameObject->transform->position;
+        CircleCollider* col = gameObject->getComponent<CircleCollider>();
+        
+        if (col) {
+            float radius = col->radius;
+            
+            // 边界范围 (600x600的正方形，中心在640,360)
+            float minX = 640.0f - 300.0f + radius + 20.0f;  // +20 墙壁厚度
+            float maxX = 640.0f + 300.0f - radius - 20.0f;
+            float minY = 360.0f - 300.0f + radius + 20.0f;
+            float maxY = 360.0f + 300.0f - radius - 20.0f;
+            
+            // 左右边界反弹
+            if (pos.x <= minX) {
+                gameObject->transform->position.x = minX;
+                rb->velocity.x = abs(rb->velocity.x) * bounceCoefficient;
+                DEBUG_LOG("Bounce: Left wall!");
+            } else if (pos.x >= maxX) {
+                gameObject->transform->position.x = maxX;
+                rb->velocity.x = -abs(rb->velocity.x) * bounceCoefficient;
+                DEBUG_LOG("Bounce: Right wall!");
+            }
+            
+            // 上下边界反弹
+            if (pos.y <= minY) {
+                gameObject->transform->position.y = minY;
+                rb->velocity.y = abs(rb->velocity.y) * bounceCoefficient;
+                DEBUG_LOG("Bounce: Top wall!");
+            } else if (pos.y >= maxY) {
+                gameObject->transform->position.y = maxY;
+                rb->velocity.y = -abs(rb->velocity.y) * bounceCoefficient;
+                DEBUG_LOG("Bounce: Bottom wall!");
+            }
+        }
+        
+        // 显示陀螺仪数据
+        static uint64_t lastLog = 0;
+        if (Time::frameCount % 60 == 0 && Time::frameCount != lastLog) {
+            DEBUG_LOG("Gyro: (%.3f, %.3f) | Vel: (%.1f, %.1f)", 
+                     gyro.x, gyro.y, rb->velocity.x, rb->velocity.y);
+            lastLog = Time::frameCount;
+        }
+    }
+};
+
+// ============================================
+// 陀螺仪小球场景
+// ============================================
+class GyroScene : public Scene {
+public:
+    GyroScene() : Scene("Gyro Ball Scene") {}
+    
+    void onLoad() override {
+        DEBUG_LOG("=== Gyro Ball Scene ===");
+        DEBUG_LOG("Tilt your device to move the ball!");
+        DEBUG_LOG("Press B to return to main menu");
+        
+        Engine& engine = Engine::getInstance();
+        
+        // 创建摄像机
+        GameObject* cameraObj = createGameObject("Camera");
+        Camera* camera = cameraObj->addComponent<Camera>();
+        camera->backgroundColor = Color(30, 30, 50);
+        
+        // 创建边界框（正方形容器）
+        float boxSize = 600.0f;
+        float boxX = 640.0f;
+        float boxY = 360.0f;
+        float wallThickness = 20.0f;
+        
+        // 上边界
+        GameObject* topWall = createGameObject("Top Wall");
+        topWall->transform->position = {boxX, boxY - boxSize/2};
+        topWall->transform->scale = {boxSize, wallThickness};
+        SpriteRenderer* topRenderer = topWall->addComponent<SpriteRenderer>();
+        topRenderer->tint = Color(100, 100, 100);
+        BoxCollider* topCol = topWall->addComponent<BoxCollider>();
+        topCol->size = {boxSize, wallThickness};
+        
+        // 下边界
+        GameObject* bottomWall = createGameObject("Bottom Wall");
+        bottomWall->transform->position = {boxX, boxY + boxSize/2};
+        bottomWall->transform->scale = {boxSize, wallThickness};
+        SpriteRenderer* bottomRenderer = bottomWall->addComponent<SpriteRenderer>();
+        bottomRenderer->tint = Color(100, 100, 100);
+        BoxCollider* bottomCol = bottomWall->addComponent<BoxCollider>();
+        bottomCol->size = {boxSize, wallThickness};
+        
+        // 左边界
+        GameObject* leftWall = createGameObject("Left Wall");
+        leftWall->transform->position = {boxX - boxSize/2, boxY};
+        leftWall->transform->scale = {wallThickness, boxSize};
+        SpriteRenderer* leftRenderer = leftWall->addComponent<SpriteRenderer>();
+        leftRenderer->tint = Color(100, 100, 100);
+        BoxCollider* leftCol = leftWall->addComponent<BoxCollider>();
+        leftCol->size = {wallThickness, boxSize};
+        
+        // 右边界
+        GameObject* rightWall = createGameObject("Right Wall");
+        rightWall->transform->position = {boxX + boxSize/2, boxY};
+        rightWall->transform->scale = {wallThickness, boxSize};
+        SpriteRenderer* rightRenderer = rightWall->addComponent<SpriteRenderer>();
+        rightRenderer->tint = Color(100, 100, 100);
+        BoxCollider* rightCol = rightWall->addComponent<BoxCollider>();
+        rightCol->size = {wallThickness, boxSize};
+        
+        // 创建小球（黄色圆球）
+        ball = createGameObject("Ball");
+        ball->transform->position = {boxX, boxY};
+        ball->transform->scale = {50, 50};  // 圆形大小
+        
+        // 使用自定义圆形渲染器
+        CircleRenderer* ballRenderer = ball->addComponent<CircleRenderer>();
+        ballRenderer->color = Color(255, 220, 0);  // 亮黄色
+        ballRenderer->radius = 25.0f;
+        
+        // 添加刚体
+        Rigidbody* rb = ball->addComponent<Rigidbody>();
+        rb->mass = 1.0f;
+        rb->drag = 0.5f;  // 增加阻力，更容易控制
+        rb->useGravity = false;  // 使用陀螺仪控制
+        
+        CircleCollider* ballCol = ball->addComponent<CircleCollider>();
+        ballCol->radius = 25.0f;  // 匹配视觉大小
+        
+        // 添加陀螺仪控制器（已优化）
+        GyroController* gyro = ball->addComponent<GyroController>();
+        gyro->sensitivity = 1800.0f;  // 更快的移动
+        gyro->maxSpeed = 600.0f;      // 更高最大速度
+        gyro->bounceCoefficient = 0.8f;  // 反弹保留80%速度
+        
+        // 添加返回按钮提示
+        DEBUG_LOG("Scene loaded successfully!");
+    }
+    
+    void onUpdate() override;  // 在 DemoScene 定义后实现
+    
+private:
+    GameObject* ball = nullptr;
+};
+
 // ============================================
 // 触控按钮组件
 // ============================================
@@ -158,6 +387,8 @@ public:
     
     bool isPressed = false;
     bool wasPressed = false;
+    static bool sceneChangeRequested;
+    static int requestedScene;
     
     void onUpdate() override {
         InputManager* input = Engine::getInstance().getInput();
@@ -213,8 +444,8 @@ public:
                 DEBUG_LOG("Touch input is working!");
                 break;
             case 2:
-                DEBUG_LOG("Action: Network Test");
-                testNetwork();
+                DEBUG_LOG("Action: Load Gyro Scene");
+                loadGyroScene();
                 break;
             case 3:
                 DEBUG_LOG("Action: Change Color");
@@ -228,19 +459,12 @@ public:
     }
     
 private:
-    void testNetwork() {
-        NetworkManager* net = Engine::getInstance().getNetwork();
-        if (!net->isInitialized()) {
-            DEBUG_LOG("Network not initialized");
-            return;
-        }
-        DEBUG_LOG("Fetching example.com...");
-        HTTPResponse resp = net->get("http://example.com");
-        if (resp.isSuccess()) {
-            DEBUG_LOG("Success! Size: %zu bytes", resp.body.size());
-        } else {
-            DEBUG_LOG("Failed: %s", resp.error.c_str());
-        }
+    void loadGyroScene() {
+        DEBUG_LOG("Loading Gyro Ball Scene...");
+        DEBUG_LOG("Get ready to tilt your device!");
+        // 不要立即切换场景，而是标记请求
+        sceneChangeRequested = true;
+        requestedScene = 2;  // 2 = GyroScene
     }
     
     void changeRandomColor() {
@@ -379,7 +603,7 @@ public:
         
         ButtonConfig buttons[] = {
             {"Touch Test", 200, 650, Color(80, 120, 200), 1},
-            {"Network", 450, 650, Color(120, 180, 80), 2},
+            {"Gyro Ball", 450, 650, Color(120, 180, 80), 2},
             {"Color", 700, 650, Color(200, 120, 80), 3},
             {"Info", 950, 650, Color(180, 80, 200), 4}
         };
@@ -417,6 +641,15 @@ public:
     }
     
     void onUpdate() override {
+        // 检查场景切换请求（必须在最开始）
+        if (TouchButton::sceneChangeRequested) {
+            TouchButton::sceneChangeRequested = false;
+            if (TouchButton::requestedScene == 2) {
+                Engine::getInstance().loadScene(std::make_unique<GyroScene>());
+                return;  // 立即返回，不再执行后续代码
+            }
+        }
+        
         // 检查退出
         InputManager* input = Engine::getInstance().getInput();
         if (input->getButtonDown(Button::Plus)) {
@@ -534,6 +767,43 @@ private:
 };
 
 // ============================================
+// TouchButton 静态变量初始化
+// ============================================
+bool TouchButton::sceneChangeRequested = false;
+int TouchButton::requestedScene = 0;
+
+// ============================================
+// GyroScene::onUpdate 实现
+// ============================================
+void GyroScene::onUpdate() {
+    InputManager* input = Engine::getInstance().getInput();
+    
+    // B 键返回主菜单
+    if (input->getButtonDown(Button::B)) {
+        DEBUG_LOG("Returning to main menu...");
+        Engine::getInstance().loadScene(std::make_unique<DemoScene>());
+        return;
+    }
+    
+    // 物理碰撞检测
+    Physics::checkCollisions(this);
+    
+    // 显示球的位置
+    static uint64_t lastLog = 0;
+    if (Time::frameCount % 120 == 0 && Time::frameCount != lastLog) {
+        if (ball) {
+            Vector2 pos = ball->transform->position;
+            Rigidbody* rb = ball->getComponent<Rigidbody>();
+            if (rb) {
+                DEBUG_LOG("Ball pos: (%.0f, %.0f) | Vel: (%.1f, %.1f)", 
+                         pos.x, pos.y, rb->velocity.x, rb->velocity.y);
+            }
+        }
+        lastLog = Time::frameCount;
+    }
+}
+
+// ============================================
 // 主函数
 // ============================================
 int main(int argc, char* argv[]) {
@@ -562,7 +832,7 @@ int main(int argc, char* argv[]) {
     printf("\n");
     printf("Touch Buttons:\n");
     printf("  🔵 Touch Test - Test touch input\n");
-    printf("  🟢 Network - Quick network test\n");
+    printf("  🟢 Gyro Ball - Play gyro control game! 🎮\n");
     printf("  🟠 Color - Change button colors\n");
     printf("  🟣 Info - Show system info\n");
     printf("\n");
