@@ -79,6 +79,9 @@ bool Texture::loadFromFile(const std::string& path, SDL_Renderer* renderer) {
         return false;
     }
 
+    // 设置纹理缩放模式为最近邻插值，避免边界像素渗透
+    SDL_SetTextureScaleMode(texture, SDL_ScaleModeNearest);
+
     this->width = width;
     this->height = height;
 
@@ -151,8 +154,14 @@ void SpriteRenderer::onRender() {
     
     SDL_Rect srcRect;
     if (sourceRect.width > 0) {
-        srcRect = {(int)sourceRect.x, (int)sourceRect.y, 
-                   (int)sourceRect.width, (int)sourceRect.height};
+        // 添加0.5像素的内缩以避免纹理采样边界问题（防止相邻帧渗透）
+        const float inset = 0.5f;
+        srcRect = {
+            (int)(sourceRect.x + inset), 
+            (int)(sourceRect.y + inset), 
+            (int)(sourceRect.width - inset * 2), 
+            (int)(sourceRect.height - inset * 2)
+        };
     } else {
         srcRect = {0, 0, texture->getWidth(), texture->getHeight()};
     }

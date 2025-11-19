@@ -70,12 +70,14 @@ bool InputManager::getButtonUp(Button button) const {
 
 Vector2 InputManager::getLeftStick() const {
     HidAnalogStickState stick = padGetStickPos(&pad, 0);
-    return {stick.x / 32767.0f, stick.y / 32767.0f};
+    // Y轴取反：向上推摇杆 = 负值，向下推 = 正值（符合屏幕坐标系）
+    return {stick.x / 32767.0f, -stick.y / 32767.0f};
 }
 
 Vector2 InputManager::getRightStick() const {
     HidAnalogStickState stick = padGetStickPos(&pad, 1);
-    return {stick.x / 32767.0f, stick.y / 32767.0f};
+    // Y轴取反：向上推摇杆 = 负值，向下推 = 正值（符合屏幕坐标系）
+    return {stick.x / 32767.0f, -stick.y / 32767.0f};
 }
 
 bool InputManager::isTouching() const {

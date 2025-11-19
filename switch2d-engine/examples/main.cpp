@@ -1,4 +1,5 @@
 #include "Switch2D/Switch2D.h"
+#include "FoxScene.h"
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
@@ -172,111 +173,7 @@ public:
 
 // 前向声明
 class DemoScene;
-class FoxScene;
-
-// ============================================
-// 小狐狸控制器组件
-// ============================================
-class FoxController : public Component
-{
-public:
-    float moveSpeed = 300.0f;
-    SpriteRenderer *spriteRenderer = nullptr;
-    Animator *animator = nullptr;
-
-    void onStart() override
-    {
-        spriteRenderer = gameObject->getComponent<SpriteRenderer>();
-        animator = gameObject->getComponent<Animator>();
-
-        // 默认播放 idle 动画
-        if (animator)
-        {
-            animator->play("idle");
-        }
-    }
-
-    void onUpdate() override
-    {
-        InputManager *input = Engine::getInstance().getInput();
-
-        // 左右移动
-        float moveX = 0;
-        float moveY = 0;
-
-        if (input->getButton(Button::Left) || input->getLeftStick().x < -0.3f)
-        {
-            moveX = -1;
-            if (spriteRenderer)
-                spriteRenderer->flipX = true;
-        }
-        if (input->getButton(Button::Right) || input->getLeftStick().x > 0.3f)
-        {
-            moveX = 1;
-            if (spriteRenderer)
-                spriteRenderer->flipX = false;
-        }
-        if (input->getButton(Button::Up) || input->getLeftStick().y < -0.3f)
-        {
-            moveY = -1;
-        }
-        if (input->getButton(Button::Down) || input->getLeftStick().y > 0.3f)
-        {
-            moveY = 1;
-        }
-
-        // 应用移动
-        transform->position.x += moveX * moveSpeed * Time::deltaTime;
-        transform->position.y += moveY * moveSpeed * Time::deltaTime;
-
-        // 根据移动状态切换动画
-        if (animator)
-        {
-            bool isMoving = (moveX != 0 || moveY != 0);
-
-            if (isMoving)
-            {
-                // 计算移动速度（判断是走还是跑）
-                float speed = sqrt(moveX * moveX + moveY * moveY);
-
-                // 快速移动时播放跑步动画，否则播放走路动画
-                if (speed > 0.8f)
-                {
-                    if (animator->getCurrentAnimation() != "run")
-                    {
-                        animator->play("run");
-                    }
-                }
-                else
-                {
-                    if (animator->getCurrentAnimation() != "walk")
-                    {
-                        animator->play("walk");
-                    }
-                }
-            }
-            else
-            {
-                // 停止时播放站立动画
-                if (animator->getCurrentAnimation() != "idle")
-                {
-                    animator->play("idle");
-                }
-            }
-        }
-
-        // 边界限制
-        Engine &engine = Engine::getInstance();
-        if (transform->position.x < 50)
-            transform->position.x = 50;
-        if (transform->position.x > engine.getScreenWidth() - 50)
-            transform->position.x = engine.getScreenWidth() - 50;
-        if (transform->position.y < 50)
-            transform->position.y = 50;
-        if (transform->position.y > engine.getScreenHeight() - 50)
-            transform->position.y = engine.getScreenHeight() - 50;
-    }
-};
+class GyroScene;
 
 // ============================================
 // 圆形渲染器组件
@@ -522,134 +419,6 @@ private:
     GameObject *ball = nullptr;
 };
 
-// ============================================
-// 小狐狸场景
-// ============================================
-class FoxScene : public Scene
-{
-public:
-    FoxScene() : Scene("Fox Scene") {}
-
-    void onLoad() override
-    {
-        DEBUG_LOG("=== Fox Scene ===");
-        DEBUG_LOG("Use D-Pad or Left Stick to move the fox!");
-        DEBUG_LOG("Press B to return to main menu");
-
-        Engine &engine = Engine::getInstance();
-        ResourceManager *resources = engine.getResources();
-
-        // 创建摄像机
-        GameObject *cameraObj = createGameObject("Camera");
-        Camera *camera = cameraObj->addComponent<Camera>();
-        camera->backgroundColor = Color(135, 206, 235); // 天蓝色
-        DEBUG_LOG("Camera created with sky blue background");
-
-        // 加载森林背景图
-        DEBUG_LOG("Attempting to load forest background...");
-        auto bgTexture = resources->loadTexture("romfs:/img/ForestBackground.png");
-        if (bgTexture)
-        {
-            GameObject *background = createGameObject("Background");
-            background->transform->position = {640, 360};
-            // 保持背景图原始比例，或者拉伸填充屏幕
-            background->transform->scale = {1280, 720};
-            SpriteRenderer *bgRenderer = background->addComponent<SpriteRenderer>();
-            bgRenderer->texture = bgTexture;
-            DEBUG_LOG("✓ Forest background loaded successfully! Size: %dx%d",
-                      bgTexture->getWidth(), bgTexture->getHeight());
-        }
-        else
-        {
-            DEBUG_LOG("✗ Warning: Could not load forest background");
-            DEBUG_LOG("  File should be at: romfs:/img/ForestBackground.png");
-        }
-
-        // 加载小狐狸精灵图
-        DEBUG_LOG("Attempting to load Foxy sprite...");
-        auto foxyTexture = resources->loadTexture("romfs:/img/Foxy.png");
-        if (foxyTexture)
-        {
-            fox = createGameObject("Foxy");
-            fox->transform->position = {640, 360}; // 屏幕中心
-            fox->transform->scale = {2.0f, 2.0f};  // 2倍缩放显示单个精灵帧（33x32）
-
-            SpriteRenderer *foxyRenderer = fox->addComponent<SpriteRenderer>();
-            foxyRenderer->texture = foxyTexture;
-            foxyRenderer->tint = Color::White(); // 确保使用白色，不改变原图颜色
-
-            // 创建动画控制器
-            Animator *animator = fox->addComponent<Animator>();
-            animator->spriteRenderer = foxyRenderer;
-
-            // 定义精灵帧尺寸（Foxy.png 是 198x384，分成 6列x12行）
-            const int frameWidth = 33;
-            const int frameHeight = 32;
-
-            // 创建 idle（站立）动画 - 使用第9行的帧
-            Animation idleAnim;
-            idleAnim.loop = true;
-            for (int i = 0; i < 4; i++)
-            {
-                idleAnim.addFrame(Rectangle{(float)(i * frameWidth), 0 * frameHeight, frameWidth, frameHeight}, 0.15f);
-            }
-            animator->addAnimation("idle", idleAnim);
-
-            // 创建 walk（走路）动画 - 使用第2行的帧
-            Animation walkAnim;
-            walkAnim.loop = true;
-            for (int i = 0; i < 6; i++)
-            {
-                walkAnim.addFrame(Rectangle{(float)(i * frameWidth), 1 * frameHeight, frameWidth, frameHeight}, 0.1f);
-            }
-            animator->addAnimation("walk", walkAnim);
-
-            // 创建 run（跑步）动画 - 使用第1行的帧
-            Animation runAnim;
-            runAnim.loop = true;
-            for (int i = 0; i < 4; i++)
-            {
-                runAnim.addFrame(Rectangle{(float)(i * frameWidth), 0, frameWidth, frameHeight}, 0.08f);
-            }
-            animator->addAnimation("run", runAnim);
-
-            // 添加小狐狸控制器
-            FoxController *foxCtrl = fox->addComponent<FoxController>();
-            foxCtrl->moveSpeed = 300.0f;
-
-            DEBUG_LOG("✓ Foxy loaded with animations!");
-            DEBUG_LOG("  Texture size: %dx%d", foxyTexture->getWidth(), foxyTexture->getHeight());
-            DEBUG_LOG("  Frame size: 33x32 (6x12 grid)");
-            DEBUG_LOG("  Animations: idle(4 frames), walk(6 frames), run(4 frames)");
-            DEBUG_LOG("  Display size: 66x64 (2x scale)");
-        }
-        else
-        {
-            DEBUG_LOG("✗ ERROR: Could not load Foxy sprite!");
-            DEBUG_LOG("  File should be at: romfs:/img/Foxy.png");
-            DEBUG_LOG("  Creating fallback colored square instead...");
-
-            // 创建一个备用的彩色方块代替小狐狸
-            fox = createGameObject("Foxy_Fallback");
-            fox->transform->position = {640, 360};
-            fox->transform->scale = {100, 100};
-
-            SpriteRenderer *fallbackRenderer = fox->addComponent<SpriteRenderer>();
-            fallbackRenderer->tint = Color(255, 140, 0); // 橙色方块
-
-            FoxController *foxCtrl = fox->addComponent<FoxController>();
-            foxCtrl->moveSpeed = 300.0f;
-        }
-
-        DEBUG_LOG("Fox Scene loaded successfully!");
-        DEBUG_LOG("Total game objects: %zu", getGameObjects().size());
-    }
-
-    void onUpdate() override; // 在 DemoScene 定义后实现
-
-private:
-    GameObject *fox = nullptr;
-};
 
 // ============================================
 // 触控按钮组件
@@ -1106,19 +875,11 @@ bool TouchButton::sceneChangeRequested = false;
 int TouchButton::requestedScene = 0;
 
 // ============================================
-// FoxScene::onUpdate 实现
+// 创建场景的辅助函数（供其他场景使用）
 // ============================================
-void FoxScene::onUpdate()
+Scene* createDemoScene()
 {
-    InputManager *input = Engine::getInstance().getInput();
-
-    // B 键返回主菜单
-    if (input->getButtonDown(Button::B))
-    {
-        DEBUG_LOG("Returning to main menu...");
-        Engine::getInstance().loadScene(std::unique_ptr<Switch2D::Scene>(new DemoScene()));
-        return;
-    }
+    return new DemoScene();
 }
 
 // ============================================

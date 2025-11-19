@@ -73,6 +73,11 @@ bool Engine::initialize(const Config& cfg) {
         return false;
     }
     
+    // ⭐ 设置渲染质量为最近邻插值（必须在创建渲染器之前设置）
+    // 这相当于Godot的"Nearest"设置，保持像素艺术清晰锐利
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
+    printf("✓ Pixel-perfect rendering enabled (Nearest filtering)\n");
+    
     // 创建渲染器
     Uint32 rendererFlags = SDL_RENDERER_ACCELERATED;
     if (config.vsync) {
@@ -85,8 +90,8 @@ bool Engine::initialize(const Config& cfg) {
         return false;
     }
     
-    // 设置渲染缩放质量
-    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
+    // 设置渲染器的逻辑大小，支持自动缩放
+    SDL_RenderSetLogicalSize(renderer, config.screenWidth, config.screenHeight);
     
     // 初始化手柄
     for (int i = 0; i < 2; i++) {

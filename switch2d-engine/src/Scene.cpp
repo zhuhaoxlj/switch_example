@@ -1,4 +1,5 @@
 #include "Switch2D/Scene.h"
+#include "Switch2D/Renderer.h"
 
 namespace Switch2D {
 
@@ -28,10 +29,30 @@ void Scene::update() {
 }
 
 void Scene::render() {
+    // 收集所有活跃的游戏对象及其SpriteRenderer的sortingOrder
+    std::vector<GameObject*> activeObjects;
     for (auto& obj : gameObjects) {
         if (obj->active) {
-            obj->render();
+            activeObjects.push_back(obj.get());
         }
+    }
+    
+    // 按sortingOrder排序（从小到大，小的先渲染）
+    std::sort(activeObjects.begin(), activeObjects.end(), 
+        [](GameObject* a, GameObject* b) {
+            // 获取SpriteRenderer组件的sortingOrder
+            auto spriteA = a->getComponent<SpriteRenderer>();
+            auto spriteB = b->getComponent<SpriteRenderer>();
+            
+            int orderA = spriteA ? spriteA->sortingOrder : 0;
+            int orderB = spriteB ? spriteB->sortingOrder : 0;
+            
+            return orderA < orderB;
+        });
+    
+    // 按排序后的顺序渲染
+    for (GameObject* obj : activeObjects) {
+        obj->render();
     }
 }
 
