@@ -50,18 +50,9 @@ bool Engine::initialize(const Config& cfg) {
         printf("SDL_Init failed: %s\n", SDL_GetError());
         return false;
     }
-    
-    // 初始化 SDL_image (如果可用)
-#ifdef HAS_SDL_IMAGE
-    int imgFlags = IMG_INIT_PNG | IMG_INIT_JPG;
-    if (!(IMG_Init(imgFlags) & imgFlags)) {
-        printf("Warning: IMG_Init failed: %s\n", IMG_GetError());
-        printf("Continuing without SDL_image support\n");
-    }
-#else
-    printf("SDL_image not available, only BMP images will be supported\n");
-#endif
-    
+
+    printf("Using stb_image for image loading (PNG, JPG, BMP supported)\n");
+
     // 创建窗口
     Uint32 windowFlags = SDL_WINDOW_SHOWN;
     if (config.fullscreen) {

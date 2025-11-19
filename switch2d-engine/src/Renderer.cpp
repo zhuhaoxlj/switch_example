@@ -2,6 +2,9 @@
 #include "Switch2D/Core.h"
 #include <cmath>
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
 namespace Switch2D {
 
 // ============================================
@@ -13,36 +16,76 @@ Texture::~Texture() {
 
 bool Texture::loadFromFile(const std::string& path, SDL_Renderer* renderer) {
     free();
-    
-    SDL_Surface* surface = nullptr;
-    
-#ifdef HAS_SDL_IMAGE
-    surface = IMG_Load(path.c_str());
-    if (!surface) {
-        printf("Failed to load texture %s: %s\n", path.c_str(), IMG_GetError());
+
+    // 使用 SDL_RWops 读取文件数据（支持 romfs:/ 路径）
+    SDL_RWops* rwops = SDL_RWFromFile(path.c_str(), "rb");
+    if (!rwops) {
+        printf("Failed to open file %s: %s\n", path.c_str(), SDL_GetError());
         return false;
     }
-#else
-    // 如果没有SDL_image，只支持BMP格式
-    surface = SDL_LoadBMP(path.c_str());
-    if (!surface) {
-        printf("Failed to load texture %s: %s\n", path.c_str(), SDL_GetError());
-        printf("Note: SDL_image not available, only BMP format is supported\n");
+
+    // 读取文件大小
+    Sint64 fileSize = SDL_RWsize(rwops);
+    if (fileSize < 0) {
+        printf("Failed to get file size for %s\n", path.c_str());
+        SDL_RWclose(rwops);
         return false;
     }
-#endif
-    
+
+    // 读取文件数据到内存
+    unsigned char* fileData = new unsigned char[fileSize];
+    if (SDL_RWread(rwops, fileData, fileSize, 1) != 1) {
+        printf("Failed to read file %s\n", path.c_str());
+        delete[] fileData;
+        SDL_RWclose(rwops);
+        return false;
+    }
+    SDL_RWclose(rwops);
+
+    // 使用 stb_image 解码图片
+    int width, height, channels;
+    unsigned char* imageData = stbi_load_from_memory(fileData, fileSize, &width, &height, &channels, STBI_rgb_alpha);
+    delete[] fileData;
+
+    if (!imageData) {
+        printf("Failed to decode image %s: %s\n", path.c_str(), stbi_failure_reason());
+        return false;
+    }
+
+    // 创建 SDL_Surface
+    SDL_Surface* surface = SDL_CreateRGBSurfaceFrom(
+        imageData,
+        width, height,
+        32, // bits per pixel (RGBA = 32)
+        width * 4, // pitch (bytes per row)
+        0x000000FF, // R mask
+        0x0000FF00, // G mask
+        0x00FF0000, // B mask
+        0xFF000000  // A mask
+    );
+
+    if (!surface) {
+        printf("Failed to create surface from image data: %s\n", SDL_GetError());
+        stbi_image_free(imageData);
+        return false;
+    }
+
+    // 创建纹理
     texture = SDL_CreateTextureFromSurface(renderer, surface);
     if (!texture) {
         printf("Failed to create texture from surface: %s\n", SDL_GetError());
         SDL_FreeSurface(surface);
+        stbi_image_free(imageData);
         return false;
     }
-    
-    width = surface->w;
-    height = surface->h;
-    
+
+    this->width = width;
+    this->height = height;
+
     SDL_FreeSurface(surface);
+    stbi_image_free(imageData);
+
+    printf("Successfully loaded texture: %s (%dx%d, %d channels)\n", path.c_str(), width, height, channels);
     return true;
 }
 

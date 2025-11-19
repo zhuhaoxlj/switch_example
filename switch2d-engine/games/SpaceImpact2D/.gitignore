@@ -1,0 +1,21 @@
+# 构建输出
+build/
+*.nro
+*.elf
+*.nacp
+*.nso
+*.npdm
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+
+# 临时文件
+*.tmp
+*.bak
