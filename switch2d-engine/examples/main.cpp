@@ -1,5 +1,7 @@
 #include "Switch2D/Switch2D.h"
 #include "FoxScene.h"
+#include "BrowserScene.h"
+// #include "BrowserScene_RmlUi.h"  // TODO: RmlUi 需要预编译库
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
@@ -174,6 +176,7 @@ public:
 // 前向声明
 class DemoScene;
 class GyroScene;
+class BrowserScene;
 
 // ============================================
 // 圆形渲染器组件
@@ -510,8 +513,12 @@ public:
             changeRandomColor();
             break;
         case 4:
-            DEBUG_LOG("Action: Show Info");
-            showSystemInfo();
+            DEBUG_LOG("Action: Load Browser Scene");
+            loadBrowserScene();
+            break;
+        case 5:
+            DEBUG_LOG("Action: Load RmlUi Browser Scene");
+            loadRmlUiBrowserScene();
             break;
         }
     }
@@ -544,6 +551,24 @@ private:
             DEBUG_LOG("New color: RGB(%d,%d,%d)",
                       normalColor.r, normalColor.g, normalColor.b);
         }
+    }
+
+    void loadBrowserScene()
+    {
+        DEBUG_LOG("Loading Browser Scene (litehtml)...");
+        DEBUG_LOG("Get ready to browse HTML pages!");
+        // 不要立即切换场景，而是标记请求
+        sceneChangeRequested = true;
+        requestedScene = 3; // 3 = BrowserScene
+    }
+
+    void loadRmlUiBrowserScene()
+    {
+        DEBUG_LOG("Loading Browser Scene (RmlUi)...");
+        DEBUG_LOG("Modern CSS3 rendering!");
+        // 标记请求
+        sceneChangeRequested = true;
+        requestedScene = 4; // 4 = BrowserSceneRmlUi
     }
 
     void showSystemInfo()
@@ -676,7 +701,7 @@ public:
             {"Fox Scene", 200, 650, Color(80, 120, 200), 1},
             {"Gyro Ball", 450, 650, Color(120, 180, 80), 2},
             {"Color", 700, 650, Color(200, 120, 80), 3},
-            {"Info", 950, 650, Color(180, 80, 200), 4}};
+            {"Browser", 950, 650, Color(180, 80, 200), 4}};
 
         for (int i = 0; i < 4; i++)
         {
@@ -725,6 +750,18 @@ public:
             {
                 Engine::getInstance().loadScene(std::unique_ptr<Switch2D::Scene>(new GyroScene()));
                 return; // 立即返回，不再执行后续代码
+            }
+            else if (TouchButton::requestedScene == 3)
+            {
+                Engine::getInstance().loadScene(std::unique_ptr<Switch2D::Scene>(new BrowserScene()));
+                return; // 立即返回，不再执行后续代码
+            }
+            else if (TouchButton::requestedScene == 4)
+            {
+                DEBUG_LOG("RmlUi requires precompiled library for Switch");
+                DEBUG_LOG("Using litehtml browser instead...");
+                Engine::getInstance().loadScene(std::unique_ptr<Switch2D::Scene>(new BrowserScene()));
+                return;
             }
         }
 
@@ -923,6 +960,10 @@ void GyroScene::onUpdate()
 // ============================================
 int main(int argc, char *argv[])
 {
+    // 初始化网络以支持 nxlink stdio 重定向
+    socketInitializeDefault();
+    nxlinkStdio();
+    
     // 初始化 romfs（必须在访问 romfs:/ 文件之前）
     Result rc = romfsInit();
     if (R_FAILED(rc))
@@ -985,5 +1026,9 @@ int main(int argc, char *argv[])
     romfsExit();
 
     printf("\nThanks for playing!\n");
+    
+    // 清理网络
+    socketExit();
+    
     return 0;
 }

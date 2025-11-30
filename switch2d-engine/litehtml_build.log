@@ -1,0 +1,10 @@
+=========================================
+  Building Litehtml Library
+=========================================
+Compiling gumbo-parser...
+  third_party/litehtml/src/gumbo/attribute.c
+third_party/litehtml/src/gumbo/attribute.c:17:10: fatal error: attribute.h: No such file or directory
+   17 | #include "attribute.h"
+      |          ^~~~~~~~~~~~~
+compilation terminated.
+Failed to compile third_party/litehtml/src/gumbo/attribute.c

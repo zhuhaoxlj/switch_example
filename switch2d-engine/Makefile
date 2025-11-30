@@ -21,8 +21,9 @@ TARGET		:=	switch2d-demo
 BUILD		:=	build
 SOURCES		:=	src examples
 DATA		:=	data
-INCLUDES	:=	include
+INCLUDES	:=	include third_party/litehtml/include third_party/litehtml/src third_party/litehtml/src/gumbo third_party/litehtml/src/gumbo/include
 ROMFS		:=	romfs
+LITEHTML_SRC :=	third_party/litehtml/src
 
 #---------------------------------------------------------------------------------
 # options for code generation
@@ -32,18 +33,20 @@ ARCH	:=	-march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
 CFLAGS	:=	-g -Wall -O2 -ffunction-sections \
 			$(ARCH) $(DEFINES)
 
-CFLAGS	+=	$(INCLUDE) -D__SWITCH__ -I$(PORTLIBS)/include/SDL2
+CFLAGS	+=	$(INCLUDE) -D__SWITCH__ -I$(PORTLIBS)/include/SDL2 -Ithird_party/litehtml/src -Ithird_party/litehtml/include/litehtml
 
-CXXFLAGS	:= $(CFLAGS) -std=gnu++17 -fno-exceptions -fno-rtti
+CXXFLAGS	:= $(CFLAGS) -std=gnu++17 -fexceptions -frtti -DLITEHTML_NO_THREADS
 
 ASFLAGS	:=	-g $(ARCH)
 LDFLAGS	=	-specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
 
-LIBS	:= -lSDL2_ttf -lfreetype -lharfbuzz -lpng -lbz2 \
+LIBS	:= ../lib/liblitehtml.a \
+		   -lSDL2_ttf -lfreetype -lharfbuzz \
+		   -lSDL2_image -lpng -ljpeg -lwebp \
 		   -lSDL2_mixer -lSDL2 \
 		   -lEGL -lglapi -ldrm_nouveau \
 		   -lopusfile -lopus -lmodplug -lmpg123 -lvorbisidec -logg \
-		   -lz -lnx -lm
+		   -lbz2 -lz -lnx -lm
 
 #---------------------------------------------------------------------------------
 # list of directories containing libraries, this must be the top level containing

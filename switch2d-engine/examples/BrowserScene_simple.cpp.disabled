@@ -1,0 +1,647 @@
+#include "BrowserScene.h"
+#include <sstream>
+#include <algorithm>
+
+// ============================================
+// SimpleHTMLParser 实现
+// ============================================
+
+std::string SimpleHTMLParser::stripTags(const std::string &text)
+{
+    // 移除 HTML 标签，只保留文本
+    std::string result;
+    bool inTag = false;
+    
+    for (char c : text)
+    {
+        if (c == '<')
+        {
+            inTag = true;
+        }
+        else if (c == '>')
+        {
+            inTag = false;
+        }
+        else if (!inTag)
+        {
+            result += c;
+        }
+    }
+    
+    return result;
+}
+
+void SimpleHTMLParser::loadFont(const char *fontPath, int fontSize)
+{
+    if (font)
+    {
+        TTF_CloseFont(font);
+        font = nullptr;
+    }
+    
+    font = TTF_OpenFont(fontPath, fontSize);
+    if (!font)
+    {
+        DEBUG_LOG("Failed to load font: %s", fontPath);
+        DEBUG_LOG("TTF Error: %s", TTF_GetError());
+    }
+    else
+    {
+        DEBUG_LOG("Font loaded successfully: %s (size: %d)", fontPath, fontSize);
+    }
+}
+
+void SimpleHTMLParser::parseHTML(const std::string &html)
+{
+    elements.clear();
+    scrollOffset = 0;
+    
+    // 简化的 HTML 解析器
+    // 支持的标签: <h1>, <h2>, <p>, <a>, <b>, <br>, <div>
+    
+    std::string currentText;
+    std::string currentTag;
+    std::string currentHref;
+    bool inTag = false;
+    bool isBold = false;
+    bool inLink = false;
+    
+    float currentFontSize = 18.0f;
+    Color currentColor = Color::White();
+    
+    size_t i = 0;
+    while (i < html.length())
+    {
+        if (html[i] == '<')
+        {
+            // 保存之前累积的文本
+            if (!currentText.empty())
+            {
+                HTMLElement elem;
+                elem.text = currentText;
+                elem.tag = currentTag.empty() ? "text" : currentTag;
+                elem.fontSize = currentFontSize;
+                elem.color = currentColor;
+                elem.isBold = isBold;
+                elem.href = currentHref;
+                elements.push_back(elem);
+                currentText.clear();
+            }
+            
+            // 解析标签
+            size_t tagEnd = html.find('>', i);
+            if (tagEnd != std::string::npos)
+            {
+                std::string tag = html.substr(i + 1, tagEnd - i - 1);
+                
+                // 检查是否是闭合标签
+                if (tag[0] == '/')
+                {
+                    std::string closeTag = tag.substr(1);
+                    if (closeTag == "b" || closeTag == "strong")
+                    {
+                        isBold = false;
+                    }
+                    else if (closeTag == "a")
+                    {
+                        inLink = false;
+                        currentHref.clear();
+                    }
+                    else if (closeTag == "h1" || closeTag == "h2" || closeTag == "h3" ||
+                             closeTag == "p" || closeTag == "div")
+                    {
+                        // 添加换行
+                        HTMLElement br;
+                        br.tag = "br";
+                        br.text = "\n";
+                        elements.push_back(br);
+                        
+                        currentFontSize = 18.0f;
+                        currentColor = Color::White();
+                    }
+                }
+                else
+                {
+                    // 开始标签
+                    std::string tagName;
+                    std::string attributes;
+                    
+                    size_t spacePos = tag.find(' ');
+                    if (spacePos != std::string::npos)
+                    {
+                        tagName = tag.substr(0, spacePos);
+                        attributes = tag.substr(spacePos + 1);
+                    }
+                    else
+                    {
+                        tagName = tag;
+                    }
+                    
+                    currentTag = tagName;
+                    
+                    // 处理不同的标签
+                    if (tagName == "h1")
+                    {
+                        currentFontSize = 28.0f;
+                        currentColor = Color(100, 200, 255);
+                        isBold = true;
+                    }
+                    else if (tagName == "h2")
+                    {
+                        currentFontSize = 24.0f;
+                        currentColor = Color(150, 220, 255);
+                        isBold = true;
+                    }
+                    else if (tagName == "h3")
+                    {
+                        currentFontSize = 22.0f;
+                        currentColor = Color(180, 230, 255);
+                        isBold = true;
+                    }
+                    else if (tagName == "p")
+                    {
+                        currentFontSize = 18.0f;
+                        currentColor = Color::White();
+                    }
+                    else if (tagName == "a")
+                    {
+                        inLink = true;
+                        currentColor = Color(100, 150, 255);
+                        
+                        // 解析 href 属性
+                        size_t hrefPos = attributes.find("href=");
+                        if (hrefPos != std::string::npos)
+                        {
+                            size_t quoteStart = attributes.find('"', hrefPos);
+                            if (quoteStart != std::string::npos)
+                            {
+                                size_t quoteEnd = attributes.find('"', quoteStart + 1);
+                                if (quoteEnd != std::string::npos)
+                                {
+                                    currentHref = attributes.substr(quoteStart + 1, quoteEnd - quoteStart - 1);
+                                }
+                            }
+                        }
+                    }
+                    else if (tagName == "b" || tagName == "strong")
+                    {
+                        isBold = true;
+                    }
+                    else if (tagName == "br")
+                    {
+                        HTMLElement br;
+                        br.tag = "br";
+                        br.text = "\n";
+                        elements.push_back(br);
+                    }
+                }
+                
+                i = tagEnd + 1;
+                continue;
+            }
+        }
+        
+        // 累积文本内容
+        currentText += html[i];
+        i++;
+    }
+    
+    // 保存最后的文本
+    if (!currentText.empty())
+    {
+        HTMLElement elem;
+        elem.text = currentText;
+        elem.tag = currentTag.empty() ? "text" : currentTag;
+        elem.fontSize = currentFontSize;
+        elem.color = currentColor;
+        elem.isBold = isBold;
+        elem.href = currentHref;
+        elements.push_back(elem);
+    }
+    
+    layoutElements();
+}
+
+void SimpleHTMLParser::layoutElements()
+{
+    // 简单的布局引擎
+    float x = 40;
+    float y = 80 - scrollOffset;
+    float lineHeight = 0;
+    float maxWidth = 1200;
+    
+    for (auto &elem : elements)
+    {
+        if (elem.tag == "br" || elem.text == "\n")
+        {
+            x = 40;
+            y += lineHeight + 10;
+            lineHeight = 0;
+            continue;
+        }
+        
+        // 计算文本宽度（使用 TTF 测量）
+        float textWidth = 0;
+        if (font)
+        {
+            int w = 0, h = 0;
+            TTF_SizeUTF8(font, elem.text.c_str(), &w, &h);
+            textWidth = w;
+        }
+        else
+        {
+            // 回退到估算
+            textWidth = elem.text.length() * elem.fontSize * 0.5f;
+        }
+        
+        // 换行处理
+        if (x + textWidth > maxWidth && x > 40)
+        {
+            x = 40;
+            y += lineHeight + 5;
+            lineHeight = 0;
+        }
+        
+        elem.position = {x, y};
+        elem.bounds = {x, y, textWidth, elem.fontSize + 5};
+        
+        x += textWidth + 5;
+        lineHeight = std::max(lineHeight, elem.fontSize + 5);
+    }
+    
+    maxScrollOffset = std::max(0.0f, y + lineHeight - 720 + 80);
+}
+
+void SimpleHTMLParser::handleInput()
+{
+    InputManager *input = Engine::getInstance().getInput();
+    
+    // 滚动控制
+    if (input->getButton(Button::Up) || input->getLeftStick().y < -0.3f)
+    {
+        scrollOffset -= 300.0f * Time::deltaTime;
+        if (scrollOffset < 0)
+            scrollOffset = 0;
+        layoutElements();
+    }
+    if (input->getButton(Button::Down) || input->getLeftStick().y > 0.3f)
+    {
+        scrollOffset += 300.0f * Time::deltaTime;
+        if (scrollOffset > maxScrollOffset)
+            scrollOffset = maxScrollOffset;
+        layoutElements();
+    }
+    
+    // 触摸点击链接
+    if (input->getTouchDown())
+    {
+        Vector2 touchPos = input->getTouchPosition();
+        
+        for (size_t i = 0; i < elements.size(); i++)
+        {
+            const auto &elem = elements[i];
+            if (!elem.href.empty())
+            {
+                if (touchPos.x >= elem.bounds.x && touchPos.x <= elem.bounds.x + elem.bounds.width &&
+                    touchPos.y >= elem.bounds.y && touchPos.y <= elem.bounds.y + elem.bounds.height)
+                {
+                    DEBUG_LOG("Link clicked: %s", elem.href.c_str());
+                    selectedLinkIndex = i;
+                    
+                    // 这里可以加载新页面
+                    if (elem.href.find("http") == 0)
+                    {
+                        DEBUG_LOG("External link: %s", elem.href.c_str());
+                        DEBUG_LOG("(Network loading not implemented in this demo)");
+                    }
+                    else
+                    {
+                        DEBUG_LOG("Internal link: %s", elem.href.c_str());
+                    }
+                }
+            }
+        }
+    }
+}
+
+void SimpleHTMLParser::onUpdate()
+{
+    handleInput();
+}
+
+void SimpleHTMLParser::onRender()
+{
+    renderElements();
+}
+
+void SimpleHTMLParser::renderText(const std::string &text, int x, int y, SDL_Color color, int maxWidth)
+{
+    SDL_Renderer *renderer = Engine::getInstance().getRenderer();
+    
+    if (!font || text.empty())
+        return;
+    
+    // 使用 TTF 渲染文本
+    SDL_Surface *surface = TTF_RenderUTF8_Blended(font, text.c_str(), color);
+    if (surface)
+    {
+        SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, surface);
+        if (texture)
+        {
+            SDL_Rect dstRect = {x, y, surface->w, surface->h};
+            
+            // 如果有最大宽度限制，裁剪文本
+            if (maxWidth > 0 && surface->w > maxWidth)
+            {
+                dstRect.w = maxWidth;
+            }
+            
+            SDL_RenderCopy(renderer, texture, nullptr, &dstRect);
+            SDL_DestroyTexture(texture);
+        }
+        SDL_FreeSurface(surface);
+    }
+}
+
+void SimpleHTMLParser::renderElements()
+{
+    SDL_Renderer *renderer = Engine::getInstance().getRenderer();
+    
+    if (!font)
+    {
+        // 如果没有字体，显示错误信息
+        SDL_SetRenderDrawColor(renderer, 255, 100, 100, 255);
+        return;
+    }
+    
+    for (size_t i = 0; i < elements.size(); i++)
+    {
+        const auto &elem = elements[i];
+        
+        if (elem.tag == "br" || elem.text.empty())
+            continue;
+        
+        // 检查是否在屏幕可见范围内
+        if (elem.position.y < -50 || elem.position.y > 770)
+            continue;
+        
+        // 设置文本颜色
+        SDL_Color textColor = {elem.color.r, elem.color.g, elem.color.b, elem.color.a};
+        
+        // 高亮选中的链接
+        if ((int)i == selectedLinkIndex && !elem.href.empty())
+        {
+            textColor = {255, 200, 100, 255};
+        }
+        
+        // 渲染真实文本
+        renderText(elem.text, (int)elem.position.x, (int)elem.position.y, textColor);
+        
+        // 绘制链接下划线
+        if (!elem.href.empty())
+        {
+            SDL_SetRenderDrawColor(renderer, textColor.r, textColor.g, textColor.b, textColor.a);
+            SDL_RenderDrawLine(renderer,
+                               (int)elem.bounds.x,
+                               (int)(elem.bounds.y + elem.bounds.height),
+                               (int)(elem.bounds.x + elem.bounds.width),
+                               (int)(elem.bounds.y + elem.bounds.height));
+        }
+    }
+    
+    // 绘制滚动条
+    if (maxScrollOffset > 0)
+    {
+        float scrollBarHeight = 600.0f;
+        float scrollBarY = 60 + (scrollOffset / maxScrollOffset) * (scrollBarHeight - 50);
+        
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(renderer, 100, 100, 100, 200);
+        SDL_Rect scrollBar = {1260, (int)scrollBarY, 10, 50};
+        SDL_RenderFillRect(renderer, &scrollBar);
+    }
+}
+
+// ============================================
+// BrowserScene 实现
+// ============================================
+
+void BrowserScene::onLoad()
+{
+    DEBUG_LOG("=== Browser Scene ===");
+    DEBUG_LOG("Loading Baidu Homepage from Internet");
+    DEBUG_LOG("Press B to return to main menu");
+    DEBUG_LOG("Use D-Pad/Stick to scroll, Touch links to interact");
+    DEBUG_LOG("Press X to reload page");
+    
+    // 创建摄像机
+    GameObject *cameraObj = createGameObject("Camera");
+    Camera *camera = cameraObj->addComponent<Camera>();
+    camera->backgroundColor = Color(20, 20, 30);
+    
+    // 创建浏览器对象
+    browserObject = createGameObject("Browser");
+    htmlParser = browserObject->addComponent<SimpleHTMLParser>();
+    
+    // 加载字体（支持中文的霞鹜文楷字体）
+    htmlParser->loadFont("romfs:/fonts/LXGWWenKai-Regular.ttf", 18);
+    
+    // 加载示例页面
+    loadSamplePage();
+    
+    // 创建地址栏背景
+    GameObject *addressBar = createGameObject("Address Bar");
+    addressBar->transform->position = {640, 30};
+    addressBar->transform->scale = {1280, 60};
+    SpriteRenderer *addrRenderer = addressBar->addComponent<SpriteRenderer>();
+    addrRenderer->tint = Color(40, 40, 60);
+    addrRenderer->sortingOrder = 10;
+    
+    DEBUG_LOG("Browser Scene loaded!");
+    DEBUG_LOG("");
+    DEBUG_LOG("=== About This Browser ===");
+    DEBUG_LOG("This is a simplified HTML renderer for demonstration.");
+    DEBUG_LOG("");
+    DEBUG_LOG("For full HTML/CSS support, consider integrating:");
+    DEBUG_LOG("- litehtml: https://github.com/litehtml/litehtml");
+    DEBUG_LOG("  * Lightweight C++ HTML/CSS engine");
+    DEBUG_LOG("  * Supports HTML5/CSS3");
+    DEBUG_LOG("  * Cross-platform (works on Switch)");
+    DEBUG_LOG("  * BSD License");
+    DEBUG_LOG("");
+    DEBUG_LOG("- Modest: https://lexborisov.github.io/Modest/");
+    DEBUG_LOG("  * Pure C HTML renderer");
+    DEBUG_LOG("  * Very lightweight");
+    DEBUG_LOG("  * MIT License");
+}
+
+void BrowserScene::loadSamplePage()
+{
+    // 尝试从网络加载百度首页
+    DEBUG_LOG("=== Loading Baidu Homepage ===");
+    DEBUG_LOG("Attempting to fetch: http://www.baidu.com");
+    
+    if (loadNetworkPage("http://www.baidu.com"))
+    {
+        DEBUG_LOG("Successfully loaded Baidu homepage!");
+        return;
+    }
+    
+    DEBUG_LOG("Network loading failed, showing demo page instead");
+    
+    // 如果网络加载失败，显示本地示例页面
+    std::string sampleHTML = R"(
+        <h1>Welcome to Switch2D Browser!</h1>
+        <p>This is a <b>simple HTML rendering engine</b> demo for Nintendo Switch.</p>
+        
+        <h2>Features</h2>
+        <p>✓ Basic HTML tag support (h1, h2, h3, p, a, b, br, div)</p>
+        <p>✓ Text formatting and colors</p>
+        <p>✓ Scrolling support</p>
+        <p>✓ Clickable links</p>
+        <p>✓ Touch interaction</p>
+        
+        <h2>Supported Tags</h2>
+        <p><b>&lt;h1&gt;, &lt;h2&gt;, &lt;h3&gt;</b> - Headings with different sizes</p>
+        <p><b>&lt;p&gt;</b> - Paragraphs</p>
+        <p><b>&lt;a href="..."&gt;</b> - Links (clickable)</p>
+        <p><b>&lt;b&gt;, &lt;strong&gt;</b> - Bold text</p>
+        <p><b>&lt;br&gt;</b> - Line breaks</p>
+        
+        <h2>How to Upgrade</h2>
+        <p>For full HTML/CSS support, integrate one of these libraries:</p>
+        
+        <h3>1. litehtml</h3>
+        <p>Fast and lightweight HTML/CSS rendering engine</p>
+        <p><a href="https://github.com/litehtml/litehtml">GitHub: litehtml/litehtml</a></p>
+        <p>• Supports HTML5/CSS3 standards</p>
+        <p>• Cross-platform (including Nintendo Switch)</p>
+        <p>• Uses gumbo-parser for HTML parsing</p>
+        <p>• BSD License</p>
+        
+        <h3>2. Modest</h3>
+        <p>Pure C HTML renderer</p>
+        <p><a href="https://lexborisov.github.io/Modest/">Website: Modest</a></p>
+        <p>• Very lightweight</p>
+        <p>• Written in pure C</p>
+        <p>• MIT License</p>
+        
+        <h3>3. Ultralight</h3>
+        <p>High-performance HTML renderer</p>
+        <p><a href="https://ultralig.ht/">Website: Ultralight</a></p>
+        <p>• GPU-accelerated</p>
+        <p>• Supports game consoles</p>
+        <p>• Commercial license available</p>
+        
+        <h2>Controls</h2>
+        <p>D-Pad / Left Stick UP/DOWN - Scroll page</p>
+        <p>Touch - Click on links</p>
+        <p>B Button - Return to main menu</p>
+        
+        <h2>Implementation Notes</h2>
+        <p>This demo uses a simplified parser that supports basic HTML.</p>
+        <p>Text is rendered using SDL primitives (rectangles).</p>
+        <p>For production use, integrate a proper HTML engine like litehtml.</p>
+        
+        <br>
+        <p><b>Thank you for testing the Switch2D Browser Engine!</b></p>
+    )";
+    
+    htmlParser->currentURL = "demo://sample-page";
+    htmlParser->parseHTML(sampleHTML);
+    
+    DEBUG_LOG("Sample page loaded: %zu elements", htmlParser->elements.size());
+}
+
+bool BrowserScene::loadNetworkPage(const std::string& url)
+{
+    DEBUG_LOG("Loading page: %s", url.c_str());
+    
+    NetworkManager* net = Engine::getInstance().getNetwork();
+    
+    if (!net->isInitialized())
+    {
+        DEBUG_LOG("ERROR: Network not initialized!");
+        DEBUG_LOG("Make sure Switch is connected to WiFi");
+        return false;
+    }
+    
+    DEBUG_LOG("Sending HTTP GET request...");
+    HTTPResponse resp = net->get(url);
+    
+    if (resp.isSuccess())
+    {
+        std::string html = resp.getBodyAsString();
+        DEBUG_LOG(" Success! Received %zu bytes", html.length());
+        DEBUG_LOG("Status: %d", resp.statusCode);
+        
+        // 显示响应头信息
+        if (resp.headers.find("Content-Type") != resp.headers.end())
+        {
+            DEBUG_LOG("Content-Type: %s", resp.headers["Content-Type"].c_str());
+        }
+        
+        // 解析并渲染 HTML
+        if (htmlParser)
+        {
+            htmlParser->currentURL = url;
+            htmlParser->parseHTML(html);
+            DEBUG_LOG("HTML parsed and rendered!");
+            DEBUG_LOG("Total elements: %zu", htmlParser->elements.size());
+            return true;
+        }
+    }
+    else
+    {
+        DEBUG_LOG(" Failed to load page!");
+        if (!resp.error.empty())
+        {
+            DEBUG_LOG("Error: %s", resp.error.c_str());
+        }
+        if (resp.statusCode > 0)
+        {
+            DEBUG_LOG("Status: %d %s", resp.statusCode, resp.statusMessage.c_str());
+        }
+        DEBUG_LOG("Check network connection and try again");
+        return false;
+    }
+    
+    return false;
+}
+
+void BrowserScene::onUpdate()
+{
+    InputManager *input = Engine::getInstance().getInput();
+    
+    // B 键返回主菜单
+    if (input->getButtonDown(Button::B))
+    {
+        DEBUG_LOG("Returning to main menu...");
+        
+        // 需要前向声明或包含 DemoScene
+        extern Scene* createDemoScene();
+        Engine::getInstance().loadScene(std::unique_ptr<Switch2D::Scene>(createDemoScene()));
+        return;
+    }
+    
+    // X 键 - 重新加载百度页面
+    if (input->getButtonDown(Button::X))
+    {
+        DEBUG_LOG("Reloading Baidu homepage...");
+        if (loadNetworkPage("http://www.baidu.com"))
+        {
+            DEBUG_LOG("Page reloaded successfully!");
+        }
+        else
+        {
+            DEBUG_LOG("Reload failed. Check network connection.");
+        }
+    }
+    
+    // Y 键 - 加载其他网站（示例）
+    if (input->getButtonDown(Button::Y))
+    {
+        DEBUG_LOG("Loading example.com...");
+        loadNetworkPage("http://www.example.com");
+    }
+}

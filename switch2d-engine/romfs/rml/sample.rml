@@ -1,0 +1,48 @@
+<rml>
+<head>
+    <title>RmlUi Sample Page</title>
+    <link type="text/rcss" href="../rcss/style.rcss"/>
+</head>
+<body>
+    <div class="header">
+        <h1>🎮 Welcome to RmlUi!</h1>
+        <p class="subtitle">Modern HTML/CSS Rendering on Nintendo Switch</p>
+    </div>
+    
+    <div class="container">
+        <div class="card">
+            <h2>✨ Features</h2>
+            <ul>
+                <li>Full CSS3 Support</li>
+                <li>Animations & Transforms</li>
+                <li>Flexbox Layout</li>
+                <li>Gamepad Navigation</li>
+                <li>Touch Input</li>
+            </ul>
+        </div>
+        
+        <div class="card">
+            <h2>🚀 Performance</h2>
+            <p>RmlUi is optimized for real-time rendering in games and applications.</p>
+            <p>Experience smooth 60 FPS UI rendering on Nintendo Switch!</p>
+        </div>
+        
+        <div class="card highlight">
+            <h2>🎨 Beautiful UI</h2>
+            <p>Create stunning user interfaces with familiar HTML and CSS!</p>
+            <button onclick="alert('Button clicked!')">Click Me!</button>
+        </div>
+        
+        <div class="card">
+            <h2>📚 Easy to Learn</h2>
+            <p>If you know HTML and CSS, you already know RmlUi!</p>
+            <p>RML is based on XHTML with CSS2/CSS3 styling.</p>
+        </div>
+    </div>
+    
+    <div class="footer">
+        <p>Powered by RmlUi • Running on Switch2D Engine</p>
+        <p>Press B to return to menu</p>
+    </div>
+</body>
+</rml>

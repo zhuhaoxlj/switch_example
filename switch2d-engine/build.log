@@ -1,0 +1,17 @@
+Audio.cpp
+Core.cpp
+DebugConsole.cpp
+GameObject.cpp
+Input.cpp
+litehtml_build.cpp
+/Users/mark/100-Project/52-Switch/switch-examples/switch2d-engine/src/litehtml_build.cpp:9:9: warning: 'LITEHTML_NO_THREADS' redefined
+    9 | #define LITEHTML_NO_THREADS
+      |         ^~~~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+In file included from /Users/mark/100-Project/52-Switch/switch-examples/switch2d-engine/src/litehtml_build.cpp:12:
+/Users/mark/100-Project/52-Switch/switch-examples/switch2d-engine/src/../third_party/litehtml/src/gumbo/attribute.c:17:10: fatal error: attribute.h: No such file or directory
+   17 | #include "attribute.h"
+      |          ^~~~~~~~~~~~~
+compilation terminated.
+make[1]: *** [litehtml_build.o] Error 1
+make: *** [build] Error 2
